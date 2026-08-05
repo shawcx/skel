@@ -34,14 +34,16 @@ class ArgParser(argparse.ArgumentParser):
 
 
 async def load(**kwds):
+    {{ py_name }}.paths = {{ py_name }}.Paths('.')
+
     # if ns is not passed in use the supplied or derived ns
     ini_name = '{{ lower_name }}'
     ini_dir  = '{{ namespace or lower_name }}'
 
     # allow several locations for ini files
     ini_files = [
-        {{ py_name }}.paths(f'{ini_name}.ini'),
-        {{ py_name }}.paths(f'{ini_name}.ini.local'),
+        #{{ py_name }}.paths(f'{ini_name}.ini'),
+        #{{ py_name }}.paths(f'{ini_name}.ini.local'),
         os.path.join(os.path.sep, 'etc', f'{ini_dir}', f'{ini_name}.ini'),
         os.path.join(os.path.expanduser('~'), f'.{ini_name}.ini'),
         ]

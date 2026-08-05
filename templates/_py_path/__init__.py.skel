@@ -1,3 +1,7 @@
+import os
+import asyncio
+
+import {{ py_name }}
 
 class error(Exception):
     '''generic error class for throwing exceptions'''
@@ -8,14 +12,15 @@ class error(Exception):
     def __str__(self):
         return self.message
 
+
 class Paths:
     def __init__(self, root):
         self.root = root
-        self.ns   = ns
+        self.ns   = '{{ namespace or lower_name }}'
 
     def __call__(self, *args):
         {% if namespace %}
-        return os.path.join(self.root, {{ namespace }}, *args)
+        return os.path.join(self.root, '{{ namespace }}', *args)
         {% else %}
         return os.path.join(self.root, *args)
         {% end %}
@@ -26,3 +31,20 @@ class Paths:
 
     def __str__(self):
         return self()
+
+
+async def wait(result):
+    '''wait on coroutines or return result of non-coroutines'''
+    try:
+        return result if not asyncio.iscoroutine(result) else await result
+    except Exception as e:
+        if {{ py_name }}.args.debug:
+            trace = []
+            for f in inspect.stack()[:0:-1]:
+                if not f.code_context:
+                    continue
+                context = '\n'.join(c.strip() for c in f.code_context)
+                msg = f'  File "{f.filename}", line {f.lineno}, in {f.function}\n    {context}'
+                trace.append(msg)
+            logging.exception(f'Unhandled exception:\n%s', '\n'.join(trace))
+        raise

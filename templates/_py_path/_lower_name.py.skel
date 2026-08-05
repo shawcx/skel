@@ -67,40 +67,40 @@ class {{ proper_name }}(tornado.web.Application):
         #    await component.close()
 
     async def _async_init(self, **kwds):
-        _.sessions = _.config.get(_.name, 'sessions', fallback=None)
-        if _.sessions:
-            logging.debug('Sessions cache: %s', _.sessions)
-            try:
-                _.sessions = _.caches[_.sessions]
-            except KeyError:
-                raise _.error('Unknown sessions cache instance: %s', _.sessions)
+        {{ py_name }}.sessions = {{ py_name }}.config.get('{{ lower_name }}', 'sessions', fallback=None)
+        #if _.sessions:
+        #    logging.debug('Sessions cache: %s', _.sessions)
+        #    try:
+        #        _.sessions = _.caches[_.sessions]
+        #    except KeyError:
+        #        raise _.error('Unknown sessions cache instance: %s', _.sessions)
 
-        self.settings['static_path']   = _.paths('static')
-        self.settings['template_path'] = _.paths('templates')
-        self.settings['debug']         = _.args.debug
+        self.settings['static_path']   = {{ py_name }}.paths('static')
+        self.settings['template_path'] = {{ py_name }}.paths('templates')
+        self.settings['debug']         = {{ py_name }}.args.debug
         if 'cookie_secret' not in self.settings:
             self.settings['cookie_secret'] = await self.cookie_secret()
 
         # call the underscore application's entry point
         try:
-            await _.wait(self.initialize())
+            await {{ py_name }}.wait(self.initialize())
         except NotImplementedError:
             logging.warning('No "initialize" function defined')
 
-        patterns = list(self._records_patterns)
+        patterns = [] #list(self._records_patterns)
 
-        if self._login_patterns:
-            patterns.extend(self._login_patterns)
-            patterns.extend([
-                ( r'/login',  _.logins.LoginPage ),
-                ( r'/logout', _.logins.Logout    ),
-                ])
-            self.settings['login_url'] = '/login'
+        #if self._login_patterns:
+        #    patterns.extend(self._login_patterns)
+        #    patterns.extend([
+        #        ( r'/login',  {{ py_name }}.logins.LoginPage ),
+        #        ( r'/logout', {{ py_name }}.logins.Logout    ),
+        #        ])
+        #    self.settings['login_url'] = '/login'
 
         patterns.extend(self.patterns)
 
         # prepend prefix specified in the ini file, useful for nginx reverse proxy
-        prefix = _.config.get(_.name, 'prefix', fallback='')
+        prefix = {{ py_name }}.config.get('{{ lower_name }}', 'prefix', fallback='')
         if prefix:
             if not prefix[0] == '/':
                 prefix = '/' + prefix
@@ -110,7 +110,7 @@ class {{ proper_name }}(tornado.web.Application):
                 ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':''}),
                 )
 
-        if _.args.debug:
+        if {{ py_name }}.args.debug:
             for (pattern,cls,*params) in patterns:
                 handler = f'{cls.__module__}.{cls.__name__}'
                 logging.debug('%-32s %s %s', pattern, handler, params[0] if params else '')
@@ -120,7 +120,7 @@ class {{ proper_name }}(tornado.web.Application):
         # block until the stop event is set
         await self._stop_event.wait()
         # call clean-up code
-        await _.wait(self.on_stop())
+        await {{ py_name }}.wait(self.on_stop())
 
     async def initialize(self):
         '''underscore app entry point'''
@@ -130,10 +130,10 @@ class {{ proper_name }}(tornado.web.Application):
         '''underscore apps can override or extend this function'''
 
         # add the handlers to the logger
-        if {{ lower_name }}.config.getboolean({{ lower_name }}, 'logging', fallback=False):
-            full_path = {{ lower_name }}.paths(f'{_.name}.log')
+        if {{ py_name }}.config.getboolean('{{ lower_name }}', 'logging', fallback=False):
+            full_path = {{ py_name }}.paths(f'{{ lower_name }}.log')
             file_logger = logging.FileHandler(full_path)
-            file_logger.setLevel(logging.DEBUG if {{ lower_name }}.args.debug else logging.INFO)
+            file_logger.setLevel(logging.DEBUG if {{ py_name }}.args.debug else logging.INFO)
             file_logger.setFormatter(
                 logging.Formatter(
                     fmt = '%(asctime)s %(levelname)-8s %(message)s',
@@ -152,7 +152,7 @@ class {{ proper_name }}(tornado.web.Application):
 
     def task(self, fn, *args, **kwds):
         async def _task():
-            await _.wait(fn(*args, **kwds))
+            await {{ py_name }}.wait(fn(*args, **kwds))
         return asyncio.create_task(_task())
 
     def periodic(self, _timeout, fn, *args, **kwds):
@@ -167,7 +167,7 @@ class {{ proper_name }}(tornado.web.Application):
                 except asyncio.TimeoutError:
                     pass
                 try:
-                    await _.wait(fn(*args, **kwds))
+                    await {{ py_name }}.wait(fn(*args, **kwds))
                 except Exception as e:
                     logging.exception(e)
         return asyncio.create_task(_periodic())
@@ -186,7 +186,7 @@ class {{ proper_name }}(tornado.web.Application):
         if handler:
             if handler(signum, frame):
                 return
-        logging.info('Terminating %s on %s signal', _.name, signame)
+        logging.info('Terminating {{ proper_name }} on %s signal', signame)
         self.loop.call_soon_threadsafe(self.stop)
 
     # demonstrate a specific signal handler
@@ -199,37 +199,37 @@ class {{ proper_name }}(tornado.web.Application):
            to initialize patterns and settings'''
         super().__init__(patterns, **self.settings)
 
-        if not _.args.address:
-            _.args.address = _.config.get(_.name, 'address', fallback='127.0.0.1')
+        if not {{ py_name }}.args.address:
+            {{ py_name }}.args.address = {{ py_name }}.config.get('{{ lower_name }}', 'address', fallback='127.0.0.1')
 
-        if not _.args.port:
-            _.args.port = _.config.getint(_.name, 'port', fallback=8080)
+        if not {{ py_name }}.args.port:
+            {{ py_name }}.args.port = {{ py_name }}.config.getint('{{ lower_name }}', 'port', fallback=8080)
 
         if 'xheaders' not in kwds:
             kwds['xheaders'] = True
 
         try:
-            self.listen(_.args.port, _.args.address, **kwds)
-            logging.info('Listening on %s:%d', _.args.address, _.args.port)
+            self.listen({{ py_name }}.args.port, {{ py_name }}.args.address, **kwds)
+            logging.info('Listening on %s:%d', {{ py_name }}.args.address, {{ py_name }}.args.port)
         except Exception as e:
             raise _.error('%s', e) from None
 
     def _record_handler(self, component, cls):
-        '''called from _.records component to add handler'''
+        '''called from {{ py_name }}.records component to add handler'''
         self._records_patterns.append(
             (f'/{component}/{cls._component}(?:/(.*))?', cls)
             )
 
     def _login_handler(self, component, cls):
-        '''called from _.logins component to add handler'''
+        '''called from {{ py_name }}.logins component to add handler'''
         self._login_patterns.append(
             (f'/{component}/{cls._component}', cls)
             )
 
     async def cookie_secret(self):
         '''underscore apps can override this function'''
-        if _.sessions is not None:
-            return await _.wait(_.sessions.cookie_secret())
+        if {{ py_name }}.sessions is not None:
+            return await {{ py_name }}.wait({{ py_name }}.sessions.cookie_secret())
 
     async def on_login_success(self, handler, user, *args, **kwds):
         '''underscore apps should override this function if a login component is specified'''
