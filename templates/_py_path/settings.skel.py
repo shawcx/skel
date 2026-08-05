@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 
-import {{ lower_name }}
+import {{ py_name }}
 
 
 # override exit to set the stop event
@@ -40,31 +40,31 @@ async def load(**kwds):
 
     # allow several locations for ini files
     ini_files = [
-        {{ lower_name }}.paths(f'{ini_name}.ini'),
-        {{ lower_name }}.paths(f'{ini_name}.ini.local'),
+        {{ py_name }}.paths(f'{ini_name}.ini'),
+        {{ py_name }}.paths(f'{ini_name}.ini.local'),
         os.path.join(os.path.sep, 'etc', f'{ini_dir}', f'{ini_name}.ini'),
         os.path.join(os.path.expanduser('~'), f'.{ini_name}.ini'),
         ]
 
     # first pass at parsing args to get additional ini files
-    {{ lower_name }}.args,remainder = {{ lower_name }}.argparser.parse_known_args()
+    {{ py_name }}.args,remainder = {{ lower_name }}.argparser.parse_known_args()
 
     # append a custom ini file if specified
-    if {{ lower_name }}.args.ini:
-        ini_files.append({{ lower_name }}.args.ini)
+    if {{ py_name }}.args.ini:
+        ini_files.append({{ py_name }}.args.ini)
 
     # little hack because I like the generic options at the bottom of the help message
-    {{ lower_name }}.args.debug = '--debug' in remainder or '-D' in remainder
+    {{ py_name }}.args.debug = '--debug' in remainder or '-D' in remainder
     logging.basicConfig(
         format  = '%(asctime)s %(levelname)-8s %(message)s',
         datefmt = '%Y-%m-%d %H:%M:%S',
-        level   = logging.DEBUG if {{ lower_name }}.args.debug else logging.INFO,
+        level   = logging.DEBUG if {{ py_name }}.args.debug else logging.INFO,
         force   = True
         )
 
     # load the ini files, at least one file must exist
     try:
-        if {{ lower_name }}.args.debug:
+        if {{ py_name }}.args.debug:
             for ini_file in ini_files:
                 logging.debug('Loading ini file: %s', ini_file)
         ok = {{ lower_name }}.config.read(ini_files)
@@ -88,4 +88,4 @@ async def load(**kwds):
         action='help', default=argparse.SUPPRESS,
         help='Show help message')
 
-    {{ lower_name }}.args = {{ lower_name }}.argparser.parse_args()
+    {{ py_name }}.args = {{ lower_name }}.argparser.parse_args()

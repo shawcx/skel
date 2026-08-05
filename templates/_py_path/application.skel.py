@@ -6,21 +6,21 @@ import traceback
 
 import tornado.web
 
-import {{ lower_name }}
+import {{ py_name }}
 
 
 # alias so handlers don't have to import tornado.web directly
-{{ lower_name }}.HTTPError = tornado.web.HTTPError
+{{ py_name }}.HTTPError = tornado.web.HTTPError
 
 
-class {{ proper_name }}:
+class {{ proper_name }}(tornado.web.Application):
     @classmethod
     def main(cls):
-        {{ lower_name }}.application = self = cls()
+        {{ py_name }}.application = self = cls()
         try:
             asyncio.run(self._async_main())
-        except {{ lower_name }}.error as e:
-            if {{ lower_name }}.args.debug:
+        except {{ py_name }}.error as e:
+            if {{ py_name }}.args.debug:
                 traceback.print_tb(e.__traceback__)
             logging.error('%s', e)
 
@@ -32,10 +32,10 @@ class {{ proper_name }}:
         signal.signal(signal.SIGTERM, self.__signalHandler)
 
         try:
-            await {{ lower_name }}.settings.load(name={{ lower_name }})
+            await {{ py_name }}.settings.load(name={{ lower_name }})
             await self.logging()
-        except {{ lower_name }}.error as e:
-            if {{ lower_name }}.args.debug:
+        except {{ py_name }}.error as e:
+            if {{ py_name }}.args.debug:
                 traceback.print_tb(e.__traceback__)
             logging.error('%s', e)
             self.stop()
@@ -43,14 +43,14 @@ class {{ proper_name }}:
         if not self._stop_event.is_set():
             try:
                 await self._async_init()
-            except _.error as e:
+            except {{ py_name }}.error as e:
                 logging.error('%s', e)
 
-        for name,component in _.caches.items():
-            await component.close()
+        #for name,component in _.caches.items():
+        #    await component.close()
 
-        for name,component in _.databases.items():
-            await component.close()
+        #for name,component in _.databases.items():
+        #    await component.close()
 
     async def _async_init(self, **kwds):
         # call the underscore application's entry point
@@ -137,7 +137,7 @@ class {{ proper_name }}:
         print()
 
 
-class WebApplication(Application, tornado.web.Application):
+class WebApplication(Application, ):
     async def _async_main(self, ns):
         self._records_patterns = []
         self._login_patterns   = []
