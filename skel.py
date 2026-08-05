@@ -61,12 +61,6 @@ class Skel:
                     print(e)
                     continue
 
-                if filename.endswith('.skel.py'):
-                    dest = f'{dest[:-8]}.py'
-                    content = loader.load(path).generate(**dict(self.project))
-                    print(path, '=>', dest[len(self.root)+1:])
-                    open(dest, 'wb').write(content)
-                    continue
                 if filename.endswith('.skel'):
                     dest = f'{dest[:-5]}'
                     content = loader.load(path).generate(**dict(self.project))
