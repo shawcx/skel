@@ -1,0 +1,7 @@
+__author__     = 'TODO: authors'
+__email__      = 'TODO: email'
+__copyright__  = 'TODO: copyright'
+__license__    = 'TODO: license'
+__version__    = 'TODO: version'
+__url__        = 'TODO: url'
+__desciption__ = 'TODO: desciption'

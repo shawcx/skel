@@ -12,6 +12,8 @@ import {{ py_name }}
 # alias so handlers don't have to import tornado.web directly
 {{ py_name }}.HTTPError = tornado.web.HTTPError
 
+from . import settings
+
 
 class {{ proper_name }}(tornado.web.Application):
     @classmethod
@@ -24,15 +26,27 @@ class {{ proper_name }}(tornado.web.Application):
                 traceback.print_tb(e.__traceback__)
             logging.error('%s', e)
 
-    async def _async_main(self, ns):
+    async def _async_main(self):
         self.loop = asyncio.get_event_loop()
         self._stop_event = asyncio.Event()
 
         signal.signal(signal.SIGINT,  self.__signalHandler)
         signal.signal(signal.SIGTERM, self.__signalHandler)
 
+        self.patterns = []
+        self.settings = {}
+
+        {{ py_name }}.argparser.add_argument('--address', '-a',
+            metavar='<address>',
+            help = 'Interface to bind to')
+
+        {{ py_name }}.argparser.add_argument('--port', '-p',
+            metavar='<port>',
+            type=int,
+            help='Port to listen on')
+
         try:
-            await {{ py_name }}.settings.load(name={{ lower_name }})
+            await {{ py_name }}.settings.load()
             await self.logging()
         except {{ py_name }}.error as e:
             if {{ py_name }}.args.debug:
@@ -53,11 +67,55 @@ class {{ proper_name }}(tornado.web.Application):
         #    await component.close()
 
     async def _async_init(self, **kwds):
+        _.sessions = _.config.get(_.name, 'sessions', fallback=None)
+        if _.sessions:
+            logging.debug('Sessions cache: %s', _.sessions)
+            try:
+                _.sessions = _.caches[_.sessions]
+            except KeyError:
+                raise _.error('Unknown sessions cache instance: %s', _.sessions)
+
+        self.settings['static_path']   = _.paths('static')
+        self.settings['template_path'] = _.paths('templates')
+        self.settings['debug']         = _.args.debug
+        if 'cookie_secret' not in self.settings:
+            self.settings['cookie_secret'] = await self.cookie_secret()
+
         # call the underscore application's entry point
         try:
             await _.wait(self.initialize())
         except NotImplementedError:
             logging.warning('No "initialize" function defined')
+
+        patterns = list(self._records_patterns)
+
+        if self._login_patterns:
+            patterns.extend(self._login_patterns)
+            patterns.extend([
+                ( r'/login',  _.logins.LoginPage ),
+                ( r'/logout', _.logins.Logout    ),
+                ])
+            self.settings['login_url'] = '/login'
+
+        patterns.extend(self.patterns)
+
+        # prepend prefix specified in the ini file, useful for nginx reverse proxy
+        prefix = _.config.get(_.name, 'prefix', fallback='')
+        if prefix:
+            if not prefix[0] == '/':
+                prefix = '/' + prefix
+            patterns = [(f'{prefix}{r[0]}',) + tuple(r[1:]) for r in patterns]
+        else:
+            patterns.append(
+                ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':''}),
+                )
+
+        if _.args.debug:
+            for (pattern,cls,*params) in patterns:
+                handler = f'{cls.__module__}.{cls.__name__}'
+                logging.debug('%-32s %s %s', pattern, handler, params[0] if params else '')
+
+        await self.__listen(patterns)
 
         # block until the stop event is set
         await self._stop_event.wait()
@@ -135,81 +193,6 @@ class {{ proper_name }}(tornado.web.Application):
     # and print newline after ^C on terminals
     def on_sigint(self, signum, frame):
         print()
-
-
-class WebApplication(Application, ):
-    async def _async_main(self, ns):
-        self._records_patterns = []
-        self._login_patterns   = []
-        self.patterns = []
-        self.settings = {}
-
-        _.argparser.add_argument('--address', '-a',
-            metavar='<address>',
-            help = 'Interface to bind to')
-
-        _.argparser.add_argument('--port', '-p',
-            metavar='<port>',
-            type=int,
-            help='Port to listen on')
-
-        await super(WebApplication, self)._async_main(ns)
-
-    async def _async_init(self, **kwds):
-        _.sessions = _.config.get(_.name, 'sessions', fallback=None)
-        if _.sessions:
-            logging.debug('Sessions cache: %s', _.sessions)
-            try:
-                _.sessions = _.caches[_.sessions]
-            except KeyError:
-                raise _.error('Unknown sessions cache instance: %s', _.sessions)
-
-        self.settings['static_path']   = _.paths('static')
-        self.settings['template_path'] = _.paths('templates')
-        self.settings['debug']         = _.args.debug
-        if 'cookie_secret' not in self.settings:
-            self.settings['cookie_secret'] = await self.cookie_secret()
-
-        # call the underscore application's entry point
-        try:
-            await _.wait(self.initialize())
-        except NotImplementedError:
-            logging.warning('No "initialize" function defined')
-
-        patterns = list(self._records_patterns)
-
-        if self._login_patterns:
-            patterns.extend(self._login_patterns)
-            patterns.extend([
-                ( r'/login',  _.logins.LoginPage ),
-                ( r'/logout', _.logins.Logout    ),
-                ])
-            self.settings['login_url'] = '/login'
-
-        patterns.extend(self.patterns)
-
-        # prepend prefix specified in the ini file, useful for nginx reverse proxy
-        prefix = _.config.get(_.name, 'prefix', fallback='')
-        if prefix:
-            if not prefix[0] == '/':
-                prefix = '/' + prefix
-            patterns = [(f'{prefix}{r[0]}',) + tuple(r[1:]) for r in patterns]
-        else:
-            patterns.append(
-                ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':''}),
-                )
-
-        if _.args.debug:
-            for (pattern,cls,*params) in patterns:
-                handler = f'{cls.__module__}.{cls.__name__}'
-                logging.debug('%-32s %s %s', pattern, handler, params[0] if params else '')
-
-        await self.__listen(patterns)
-
-        # block until the stop event is set
-        await self._stop_event.wait()
-        # call clean-up code
-        await _.wait(self.on_stop())
 
     async def __listen(self, patterns, **kwds):
         '''call the Tornado Application init here to give children a chance

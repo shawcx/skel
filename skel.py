@@ -67,6 +67,12 @@ class Skel:
                     print(path, '=>', dest[len(self.root)+1:])
                     open(dest, 'wb').write(content)
                     continue
+                if filename.endswith('.skel'):
+                    dest = f'{dest[:-5]}'
+                    content = loader.load(path).generate(**dict(self.project))
+                    print(path, '=>', dest[len(self.root)+1:])
+                    open(dest, 'wb').write(content)
+                    continue
                 else:
                     print('TODO: handle', filename)
                 #    print(os.getcwd(), path, '=>', dest)

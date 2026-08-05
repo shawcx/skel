@@ -20,23 +20,23 @@ class ArgParser(argparse.ArgumentParser):
         {{ py_name }}.{{ proper_name }}.stop()
 
 
-{{ lower_name }}.argparser = ArgParser(add_help=False)
+{{ py_name }}.argparser = ArgParser(add_help=False)
 
-{{ lower_name }}.argparser.add_argument('--ini', '-I',
+{{ py_name }}.argparser.add_argument('--ini', '-I',
     metavar='<path>',
     help='Specify additional ini file')
 
-{{ lower_name }}.config = configparser.ConfigParser(
+{{ py_name }}.config = configparser.ConfigParser(
     allow_no_value = True,
     interpolation  = None,
     )
-{{ lower_name }}.config.optionxform = str
+{{ py_name }}.config.optionxform = str
 
 
 async def load(**kwds):
     # if ns is not passed in use the supplied or derived ns
-    ini_name = {{ lower_name }}
-    ini_dir  = {{ namespace or lower_name }}
+    ini_name = '{{ lower_name }}'
+    ini_dir  = '{{ namespace or lower_name }}'
 
     # allow several locations for ini files
     ini_files = [
@@ -47,7 +47,7 @@ async def load(**kwds):
         ]
 
     # first pass at parsing args to get additional ini files
-    {{ py_name }}.args,remainder = {{ lower_name }}.argparser.parse_known_args()
+    {{ py_name }}.args,remainder = {{ py_name }}.argparser.parse_known_args()
 
     # append a custom ini file if specified
     if {{ py_name }}.args.ini:
