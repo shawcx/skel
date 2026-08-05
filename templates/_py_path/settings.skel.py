@@ -1,0 +1,91 @@
+
+import argparse
+import collections
+import configparser
+import inspect
+import logging
+import os
+import sys
+import time
+import traceback
+
+import {{ lower_name }}
+
+
+# override exit to set the stop event
+class ArgParser(argparse.ArgumentParser):
+    def exit(self, status=0, message=None):
+        if message:
+            self._print_message(message, sys.stderr)
+        {{ lower_name }}.application.stop()
+
+
+{{ lower_name }}.argparser = ArgParser(add_help=False)
+
+{{ lower_name }}.argparser.add_argument('--ini', '-I',
+    metavar='<path>',
+    help='Specify additional ini file')
+
+{{ lower_name }}.config = configparser.ConfigParser(
+    allow_no_value = True,
+    interpolation  = None,
+    )
+{{ lower_name }}.config.optionxform = str
+
+
+async def load(**kwds):
+    # if ns is not passed in use the supplied or derived ns
+    ini_name = {{ lower_name }}
+    ini_dir  = {{ namespace or lower_name }}
+
+    # allow several locations for ini files
+    ini_files = [
+        {{ lower_name }}.paths(f'{ini_name}.ini'),
+        {{ lower_name }}.paths(f'{ini_name}.ini.local'),
+        os.path.join(os.path.sep, 'etc', f'{ini_dir}', f'{ini_name}.ini'),
+        os.path.join(os.path.expanduser('~'), f'.{ini_name}.ini'),
+        ]
+
+    # first pass at parsing args to get additional ini files
+    {{ lower_name }}.args,remainder = {{ lower_name }}.argparser.parse_known_args()
+
+    # append a custom ini file if specified
+    if {{ lower_name }}.args.ini:
+        ini_files.append({{ lower_name }}.args.ini)
+
+    # little hack because I like the generic options at the bottom of the help message
+    {{ lower_name }}.args.debug = '--debug' in remainder or '-D' in remainder
+    logging.basicConfig(
+        format  = '%(asctime)s %(levelname)-8s %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S',
+        level   = logging.DEBUG if {{ lower_name }}.args.debug else logging.INFO,
+        force   = True
+        )
+
+    # load the ini files, at least one file must exist
+    try:
+        if {{ lower_name }}.args.debug:
+            for ini_file in ini_files:
+                logging.debug('Loading ini file: %s', ini_file)
+        ok = {{ lower_name }}.config.read(ini_files)
+    except configparser.ParsingError as e:
+        raise {{ lower_name }}.error('Unable to parse file: %s', e)
+
+    if not ok:
+        logging.warning('Unable to read config file(s):\n  %s', '\n  '.join(ini_files))
+
+    # add the generic arguments after any components
+    {{ lower_name }}.argparser.add_argument('--debug', '-D',
+        action='store_true',
+        help='Log verbose debugging information')
+
+    {{ lower_name }}.argparser.add_argument('--version', '-V',
+        action='store_true',
+        help='Show version and exit'
+        )
+
+    {{ lower_name }}.argparser.add_argument('--help', '-h',
+        action='help', default=argparse.SUPPRESS,
+        help='Show help message')
+
+    {{ lower_name }}.args = {{ lower_name }}.argparser.parse_args()
