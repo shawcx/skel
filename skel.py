@@ -69,7 +69,6 @@ class Skel:
                     continue
                 else:
                     print('TODO: handle', filename)
-                #if filename.endswith(('.png','.jpg','.gif')):
                 #    print(os.getcwd(), path, '=>', dest)
                 #    shutil.copy(os.path.join('templates',path), dest)
                 #    print(path, '=>', dest[len(self.root):])

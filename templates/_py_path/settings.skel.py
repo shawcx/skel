@@ -17,7 +17,7 @@ class ArgParser(argparse.ArgumentParser):
     def exit(self, status=0, message=None):
         if message:
             self._print_message(message, sys.stderr)
-        {{ lower_name }}.application.stop()
+        {{ py_name }}.{{ proper_name }}.stop()
 
 
 {{ lower_name }}.argparser = ArgParser(add_help=False)
@@ -67,25 +67,25 @@ async def load(**kwds):
         if {{ py_name }}.args.debug:
             for ini_file in ini_files:
                 logging.debug('Loading ini file: %s', ini_file)
-        ok = {{ lower_name }}.config.read(ini_files)
+        ok = {{ py_name }}.config.read(ini_files)
     except configparser.ParsingError as e:
-        raise {{ lower_name }}.error('Unable to parse file: %s', e)
+        raise {{ py_name }}.error('Unable to parse file: %s', e)
 
     if not ok:
         logging.warning('Unable to read config file(s):\n  %s', '\n  '.join(ini_files))
 
     # add the generic arguments after any components
-    {{ lower_name }}.argparser.add_argument('--debug', '-D',
+    {{ py_name }}.argparser.add_argument('--debug', '-D',
         action='store_true',
         help='Log verbose debugging information')
 
-    {{ lower_name }}.argparser.add_argument('--version', '-V',
+    {{ py_name }}.argparser.add_argument('--version', '-V',
         action='store_true',
         help='Show version and exit'
         )
 
-    {{ lower_name }}.argparser.add_argument('--help', '-h',
+    {{ py_name }}.argparser.add_argument('--help', '-h',
         action='help', default=argparse.SUPPRESS,
         help='Show help message')
 
-    {{ py_name }}.args = {{ lower_name }}.argparser.parse_args()
+    {{ py_name }}.args = {{ py_name }}.argparser.parse_args()
