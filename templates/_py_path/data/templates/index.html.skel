@@ -1,0 +1,16 @@
+{%! extends 'base.template' %}
+
+{%! block scripts %}
+<script src="/static/js/{{ lower_name }}.js"></script>
+{%! end %}
+
+{%! block body %}
+  <div class="card text-bg-dark">
+    <h2 class="card-header">
+      <img src="/static/images/{{ lower_name }}.png" alt="{{ proper_name }}" />
+      <span class="float-end">
+        <small><i class="fa fa-user"></i> {{! current_user['username'] }}</small>
+      </span>
+    </h2>
+  </div>
+{%! end %}

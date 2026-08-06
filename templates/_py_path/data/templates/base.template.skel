@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=0.5">
+  <meta name="description" content="{{ proper_name }}">
+  <title>{{ proper_name }}</title>
+  <link rel="icon"       type="image/x-icon" href="/static/favicon.ico">
+  <link rel="stylesheet" type="text/css"     href="/static/css/{{ lower_name }}.css" />
+</head>
+<body>
+{%! set nav_dashboard = "" %}
+{%! set nav_messages  = "" %}
+{%! set nav_admin     = "" %}
+{%! block vars %}{%! end %}
+{%! block nav %}
+  <nav class="navbar navbar-expand-lg fixed-top border-bottom border-primary">
+    <div class="container">
+      <a class="navbar-brand" href="/">Skeleton</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-{{ lower_name }}" aria-controls="navbar-{{ lower_name }}" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbar-{{ lower_name }}">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item me-2"><a class="nav-link {{! nav_dashboard }}" href="/dashboard"><i class="fa fa-gauge-high"  ></i> Dashboard </a></li>
+          <li class="nav-item me-2"><a class="nav-link {{! nav_messages  }}" href="/messages" ><i class="fa fa-envelope"    ></i> Messages  </a></li>
+          <li class="nav-item me-2"><a class="nav-link {{! nav_admin     }}" href="/admin"    ><i class="fa fa-wrench"      ></i> Admin     </a></li>
+        </ul>
+        <span class="navbar-text" id="navbar-time">
+        </span>
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item pe-4">
+            <a class="nav-link"><i class="fa fa-fw fa-user"></i>{{! current_user['username'] }}</a>
+          </li>
+          <li class="nav-item">
+            <a class="btn btn-warning" href="/logout" title="Logout"><i class="fa fa-fw fa-right-from-bracket"></i></a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+{%! end %}
+  <div class="container">{%! block body %}{%! end %}</div>
+</body>
+{%! block scripts %}{%! end %}
+</html>

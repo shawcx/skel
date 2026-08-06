@@ -92,10 +92,9 @@ class Skel:
                     open(dest, 'wb').write(content)
                     continue
                 else:
-                    print('TODO: handle', filename)
-                #    print(os.getcwd(), path, '=>', dest)
-                #    shutil.copy(os.path.join('templates',path), dest)
-                #    print(path, '=>', dest[len(self.root):])
+                    shutil.copy(os.path.join('templates',path), dest)
+                    print(path, '=>', dest[len(self.root)+1:])
+                    continue
 
         return 0
 

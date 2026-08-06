@@ -1,0 +1,19 @@
+
+@import "bootstrap";
+
+@import "fontawesome";
+@import "solid";
+@import "regular";
+
+body {
+    background: var(--bs-tertiary-bg);
+    margin-top: 5em;
+}
+
+div.card {
+    margin-bottom: 1em;
+}
+
+a {
+    text-decoration: none;
+}
