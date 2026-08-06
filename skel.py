@@ -36,9 +36,33 @@ class Project:
     lower_name  : str
     py_path     : str
     py_name     : str
+    __author__  : str
 
 
 class Skel:
+    def __init__(self):
+        self.root = os.path.abspath(os.getcwd())
+
+        self.args = argparser.parse_args()
+
+        self.project = jsxn.Project()
+
+        try:
+            with open('values.txt', 'r') as fp:
+                key,value = fp.readline().split('=')
+                key = key.strip()
+                value = value.strip()
+                self.project[key] = value
+        except NotImplementedError:
+            pass
+
+        self.project.namespace   = self.args.namespace
+        self.project.proper_name = self.args.project
+        self.project.lower_name  = self.args.project.lower()
+
+        self.project.py_path = os.path.join(self.args.namespace, self.project.lower_name)
+        self.project.py_name = self.project.py_path.replace(os.path.sep, '.')
+
     @classmethod
     def main(cls):
         self = cls()
@@ -74,20 +98,6 @@ class Skel:
                 #    print(path, '=>', dest[len(self.root):])
 
         return 0
-
-    def __init__(self):
-        self.root = os.path.abspath(os.getcwd())
-
-        self.args = argparser.parse_args()
-
-        self.project = jsxn.Project()
-        self.project.namespace   = self.args.namespace
-        self.project.proper_name = self.args.project
-        self.project.lower_name  = self.args.project.lower()
-
-        self.project.py_path = os.path.join(self.args.namespace, self.project.lower_name)
-        self.project.py_name = self.project.py_path.replace(os.path.sep, '.')
-
 
 
 if '__main__' == __name__:

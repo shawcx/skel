@@ -1,0 +1,16 @@
+{
+  "name": "{{ lower_name }}",
+  "version": "0.2.0",
+  "description": "{{ proper_name }}",
+  "browser": "{{ lower_name }}.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "TODO",
+  "license": "TODO",
+  "repository": {
+    "type": "git",
+    "url": "TODO"
+  }
+}

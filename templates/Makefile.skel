@@ -1,5 +1,5 @@
 all:
-	@#
+	@$(MAKE) -C src
 
 run:
 	PYTHONPATH=. python3 -m {{ py_name }}

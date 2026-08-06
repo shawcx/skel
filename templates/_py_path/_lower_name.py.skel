@@ -75,8 +75,8 @@ class {{ proper_name }}(tornado.web.Application):
         #    except KeyError:
         #        raise _.error('Unknown sessions cache instance: %s', _.sessions)
 
-        self.settings['static_path']   = {{ py_name }}.paths('static')
-        self.settings['template_path'] = {{ py_name }}.paths('templates')
+        self.settings['static_path']   = {{ py_name }}.data('static')
+        self.settings['template_path'] = {{ py_name }}.data('templates')
         self.settings['debug']         = {{ py_name }}.args.debug
         if 'cookie_secret' not in self.settings:
             self.settings['cookie_secret'] = await self.cookie_secret()

@@ -3,6 +3,7 @@ import asyncio
 
 import {{ py_name }}
 
+
 class error(Exception):
     '''generic error class for throwing exceptions'''
 
@@ -14,16 +15,14 @@ class error(Exception):
 
 
 class Paths:
-    def __init__(self, root):
-        self.root = root
-        self.ns   = '{{ namespace or lower_name }}'
+    def __init__(self, root=None):
+        if root:
+            self.root = root
+        else:
+            self.root = os.path.join(os.path.dirname(__file__), 'data')
 
     def __call__(self, *args):
-        {% if namespace %}
-        return os.path.join(self.root, '{{ namespace }}', *args)
-        {% else %}
         return os.path.join(self.root, *args)
-        {% end %}
 
     # support / as a path joiner
     def __truediv__(self, other):
