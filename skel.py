@@ -53,8 +53,8 @@ class Skel:
                 key = key.strip()
                 value = value.strip()
                 self.project[key] = value
-        except NotImplementedError:
-            pass
+        except FileNotFoundError:
+            se.project.__author__ = ''
 
         self.project.namespace   = self.args.namespace
         self.project.proper_name = self.args.project
