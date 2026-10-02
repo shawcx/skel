@@ -1,1 +1,5 @@
+# optional project metadata, one key = value per line
 __author__ = Matthew Shaw
+#__email__ = you@example.com
+#__license__ = MIT
+#__url__ = https://github.com/you/project

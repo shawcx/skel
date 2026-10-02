@@ -21,6 +21,10 @@ argparser.add_argument('--namespace',
     metavar='<namespace>', default='',
     help='parent namespace of the project')
 
+argparser.add_argument('--output', '-o',
+    metavar='<directory>',
+    help='directory to create the project in, defaults to projects/<project>')
+
 argparser.add_argument('--force',
     action='store_true',
     help='overwrite an existing project')
@@ -40,6 +44,12 @@ class Project:
     __email__   : str
     __license__ : str
     __url__     : str
+
+
+def display(path):
+    '''show paths under the current directory as relative, others as absolute'''
+    rel = os.path.relpath(path)
+    return path if rel.startswith('..') else rel
 
 
 class Skel:
@@ -65,7 +75,10 @@ class Skel:
         self.project.py_path = os.path.join(self.args.namespace, self.project.lower_name)
         self.project.py_name = self.project.py_path.replace(os.path.sep, '.')
 
-        self.output = os.path.join(self.root, 'projects', self.project.lower_name)
+        if self.args.output:
+            self.output = os.path.abspath(self.args.output)
+        else:
+            self.output = os.path.join(self.root, 'projects', self.project.lower_name)
 
         # path components like _lower_name or _py_path are replaced with their values
         keys = sorted((k for k,v in self.project if not k.startswith('__')), key=len, reverse=True)
@@ -130,9 +143,9 @@ class Skel:
                     return 1
 
                 if self.args.verbose:
-                    print(path, '=>', os.path.relpath(dest, self.root))
+                    print(path, '=>', display(dest))
 
-        print(f'Created {os.path.relpath(self.output)}')
+        print(f'Created {display(self.output)}')
         return 0
 
 
