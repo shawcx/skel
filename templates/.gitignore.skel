@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+/build/
+/dist/
+*.egg-info/
+
+# web build, run make to recreate
+/src/node_modules/
+/{{ py_path }}/data/static/css/
+/{{ py_path }}/data/static/js/
+/{{ py_path }}/data/static/webfonts/
+
+# local settings and logs
+/{{ py_path }}/data/{{ lower_name }}.ini.local
+/{{ py_path }}/data/{{ lower_name }}.log

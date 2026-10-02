@@ -67,6 +67,21 @@ def check(tmp, namespace):
     run(sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke')
     assert os.path.isfile(os.path.join(package, 'smoke.py')), package
 
+    step('gitignore')
+    run('git', 'init', '-q', project)
+    static = os.path.join(package, 'data', 'static')
+    for path,ignored in [
+            (os.path.join(static, 'css', 'smoke.css'), True),
+            (os.path.join(static, 'js', 'smoke.js'), True),
+            (os.path.join(project, 'src', 'node_modules', 'x'), True),
+            (os.path.join(package, 'data', 'smoke.ini.local'), True),
+            (os.path.join(static, 'favicon.ico'), False),
+            (os.path.join(package, 'data', 'smoke.ini'), False),
+            (os.path.join(project, 'src', 'package-lock.json'), False),
+            ]:
+        rc = subprocess.run(['git', '-C', project, 'check-ignore', '-q', path]).returncode
+        assert (rc == 0) == ignored, f'{path} should {"" if ignored else "not "}be ignored'
+
     step('compile')
     run(sys.executable, '-m', 'compileall', '-q', project)
 

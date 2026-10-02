@@ -72,8 +72,9 @@ class Skel:
         self.project.proper_name = self.args.project
         self.project.lower_name  = self.args.project.lower()
 
-        self.project.py_path = os.path.join(self.args.namespace, self.project.lower_name)
-        self.project.py_name = self.project.py_path.replace(os.path.sep, '.')
+        # always use / since py_path also ends up in Makefiles and .gitignore
+        self.project.py_path = '/'.join(filter(None, [self.args.namespace, self.project.lower_name]))
+        self.project.py_name = self.project.py_path.replace('/', '.')
 
         if self.args.output:
             self.output = os.path.abspath(self.args.output)
