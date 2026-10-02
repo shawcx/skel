@@ -48,7 +48,11 @@ class Project:
 
 def display(path):
     '''show paths under the current directory as relative, others as absolute'''
-    rel = os.path.relpath(path)
+    try:
+        rel = os.path.relpath(path)
+    except ValueError:
+        # on Windows there is no relative path between drives
+        return path
     return path if rel.startswith('..') else rel
 
 
