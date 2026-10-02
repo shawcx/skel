@@ -1,0 +1,12 @@
+[{{ lower_name }}]
+address = 127.0.0.1
+port    = 8080
+
+# prepend a path to every route, useful behind a reverse proxy
+#prefix = /{{ lower_name }}
+
+# also log to {{ lower_name }}.log in the data directory
+#logging = true
+
+# keep sessions valid across restarts, otherwise a random secret is generated
+#cookie_secret =

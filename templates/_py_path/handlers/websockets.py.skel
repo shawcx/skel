@@ -1,7 +1,7 @@
 
 import tornado.websocket
 
-import _
+import {{ py_name }}
 
 
 class WebSocket(tornado.websocket.WebSocketHandler):
@@ -13,10 +13,10 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.websockets = websockets
 
     def check_origin(self, origin):
+        # any origin is allowed while debugging, otherwise only the same host
         if {{ py_name }}.args.debug:
             return True
-        # TODO: let app specify origin policy
-        return True
+        return super().check_origin(origin)
 
     def open(self):
         self.set_nodelay(True)
@@ -25,6 +25,9 @@ class WebSocket(tornado.websocket.WebSocketHandler):
     # default behavior
     def on_message(self, msg):
         '''Reflect incoming messages to all other connected WebSockets'''
+        # keep-alive sent by socket.js
+        if msg == 'ping':
+            return
         for ws in self.websockets.values():
             if ws is self:
                 continue
@@ -38,6 +41,9 @@ class ProtectedSocket(WebSocket):
     '''Require a valid user session to establish WebSocket connection'''
 
     async def prepare(self):
+        if {{ py_name }}.sessions is None:
+            raise {{ py_name }}.HTTPError(500, 'No session component specified')
+
         self.session_id = self.get_secure_cookie('session_id')
         if not self.session_id:
             raise {{ py_name }}.HTTPError(403)
@@ -46,5 +52,3 @@ class ProtectedSocket(WebSocket):
         self.session = await {{ py_name }}.wait({{ py_name }}.sessions.load_session(self.session_id))
         if not self.session:
             raise {{ py_name }}.HTTPError(403)
-
-

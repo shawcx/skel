@@ -9,6 +9,7 @@ class Socket {
             timeout   : 0.9375,
             maxtime   : 60,
             ping      : 300,
+            onopen    : function() {},
             onmessage : function(msg) {}
         }
 
@@ -35,10 +36,17 @@ class Socket {
                     this.ws.send('ping')
                 }, 1000 * this.options.ping)
             }
+            this.options.onopen()
         }
 
         this.ws.onmessage = (event) => {
-            let msg = JSON.parse(event.data)
+            let msg
+            try {
+                msg = JSON.parse(event.data)
+            } catch (e) {
+                console.warn('Ignoring non-JSON message:', event.data)
+                return
+            }
             this.options.onmessage(msg)
         }
 

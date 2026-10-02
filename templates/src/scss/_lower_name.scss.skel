@@ -1,6 +1,7 @@
 
 @import "bootstrap";
 
+$fa-font-path: "../webfonts";
 @import "fontawesome";
 @import "solid";
 @import "regular";

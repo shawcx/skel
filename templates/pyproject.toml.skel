@@ -1,0 +1,30 @@
+{% import json %}[build-system]
+requires      = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "{{ lower_name }}"
+description     = "{{ proper_name }}"
+readme          = "README.md"
+requires-python = ">=3.10"
+dynamic         = ["version"]
+dependencies    = [
+    "tornado>=6.4",
+]
+{% if __license__ %}license         = {{ json.dumps(__license__) }}
+{% end %}{% if __author__ %}authors         = [{ name = {{ json.dumps(__author__) }}{% if __email__ %}, email = {{ json.dumps(__email__) }}{% end %} }]
+{% end %}{% if __url__ %}
+[project.urls]
+Homepage = {{ json.dumps(__url__) }}
+{% end %}
+[project.scripts]
+{{ lower_name }} = "{{ py_name }}.{{ lower_name }}:{{ proper_name }}.main"
+
+[tool.setuptools.dynamic]
+version = { attr = "{{ py_name }}.version.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["{{ namespace or lower_name }}*"]
+
+[tool.setuptools.package-data]
+"{{ py_name }}" = ["data/**/*"]

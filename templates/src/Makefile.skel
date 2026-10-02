@@ -10,28 +10,39 @@ JS_FILE   = js/{{ lower_name }}.js
 JS_OUT    = $(STATIC_ROOT)/$(JS_FILE)
 
 CSS_OUT = $(STATIC_ROOT)/css/{{ lower_name }}.css
-CSS_SRC = sass/{{ lower_name }}.scss $(wildcard sass/*.scss)
+CSS_SRC = scss/{{ lower_name }}.scss $(wildcard scss/*.scss)
 
-SASS_FLAGS = -I ./node_modules/@fortawesome/fontawesome-pro/scss \
-             -I ./node_modules/bootstrap/scss
+# bootstrap 5 still requires @import, so silence the Dart Sass deprecation
+SASS_FLAGS = -I ./node_modules/@fortawesome/fontawesome-free/scss \
+             -I ./node_modules/bootstrap/scss \
+             --silence-deprecation=import \
+             --quiet-deps \
+             --no-error-css
 
-#WEBFONTS_SRC = ./node_modules/@fortawesome/fontawesome-pro/webfonts
-#WEBFONTS = $(STATIC_ROOT)/webfonts
+WEBFONTS_SRC = ./node_modules/@fortawesome/fontawesome-free/webfonts
+WEBFONTS     = $(STATIC_ROOT)/webfonts
 
-all: node_modules $(JS_OUT) $(CSS_OUT) #$(WEBFONTS)
+# don't leave partial outputs behind when a build step fails
+.DELETE_ON_ERROR:
+
+all: node_modules $(JS_OUT) $(CSS_OUT) $(WEBFONTS)
 	@#
 
-$(WEBFONTS): $(WEBFONTS_SRC)
+$(WEBFONTS): node_modules
+	@mkdir -p $(STATIC_ROOT)
 	@cp -r $(WEBFONTS_SRC) $(STATIC_ROOT)
 
-node_modules:
-	@npm install .
+node_modules: package.json
+	@npm install
+	@touch node_modules
 
-$(JS_OUT): $(JS_FILES)
+$(JS_OUT): $(JS_FILES) node_modules
+	@mkdir -p $(dir $@)
 	@echo browserify $(JS_FILE) '=>' $@
 	@$(BROWSERIFY) $(JS_FILE) -o $@
 
-$(CSS_OUT): $(CSS_SRC)
+$(CSS_OUT): $(CSS_SRC) node_modules
+	@mkdir -p $(dir $@)
 	@echo sass $< '=>' $@
 	@$(SASS) $(SASS_FLAGS) $< $@
 
@@ -40,4 +51,5 @@ clean:
 distclean: clean
 	@rm -vf $(CSS_OUT)
 	@rm -vf $(JS_OUT)
+	@rm -rf $(WEBFONTS)
 	@rm -rf node_modules

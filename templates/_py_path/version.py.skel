@@ -1,7 +1,7 @@
-__author__      = 'TODO: authors'
-__email__       = 'TODO: email'
-__copyright__   = 'TODO: copyright'
-__license__     = 'TODO: license'
-__version__     = 'TODO: version'
-__url__         = 'TODO: url'
-__description__ = 'TODO: description'
+__author__      = {{ repr(__author__ or 'TODO: author') }}
+__email__       = {{ repr(__email__ or 'TODO: email') }}
+__copyright__   = {{ repr('Copyright ' + (__author__ or 'TODO: copyright')) }}
+__license__     = {{ repr(__license__ or 'TODO: license') }}
+__version__     = '0.1.0'
+__url__         = {{ repr(__url__ or 'TODO: url') }}
+__description__ = {{ repr(proper_name) }}

@@ -1,26 +1,15 @@
 
 import argparse
-import collections
 import configparser
-import inspect
 import logging
 import os
-import sys
-import time
-import traceback
 
 import {{ py_name }}
 
-
-# override exit to set the stop event
-class ArgParser(argparse.ArgumentParser):
-    def exit(self, status=0, message=None):
-        if message:
-            self._print_message(message, sys.stderr)
-        {{ py_name }}.{{ proper_name }}.stop()
+from . import version
 
 
-{{ py_name }}.argparser = ArgParser(add_help=False)
+{{ py_name }}.argparser = argparse.ArgumentParser(add_help=False)
 
 {{ py_name }}.argparser.add_argument('--ini', '-I',
     metavar='<path>',
@@ -47,8 +36,6 @@ async def load(**kwds):
         os.path.join(os.path.sep, 'etc', f'{ini_dir}', f'{ini_name}.ini'),
         os.path.join(os.path.expanduser('~'), f'.{ini_name}.ini'),
         ]
-
-    print(ini_files)
 
     # first pass at parsing args to get additional ini files
     {{ py_name }}.args,remainder = {{ py_name }}.argparser.parse_known_args()
@@ -84,7 +71,8 @@ async def load(**kwds):
         help='Log verbose debugging information')
 
     {{ py_name }}.argparser.add_argument('--version', '-V',
-        action='store_true',
+        action='version',
+        version=f'%(prog)s {version.__version__}',
         help='Show version and exit'
         )
 

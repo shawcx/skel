@@ -37,6 +37,9 @@ class Project:
     py_path     : str
     py_name     : str
     __author__  : str
+    __email__   : str
+    __license__ : str
+    __url__     : str
 
 
 class Skel:
@@ -48,7 +51,10 @@ class Skel:
         self.args = argparser.parse_args()
 
         self.project = jsxn.Project()
-        self.project.__author__ = ''
+        # optional values from values.txt default to empty
+        for key in self.project.__slots__:
+            if key.startswith('__'):
+                self.project[key] = ''
 
         self.load_values(os.path.join(self.root, 'values.txt'))
 

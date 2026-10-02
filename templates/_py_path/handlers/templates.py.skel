@@ -1,7 +1,7 @@
 
 import tornado.web
 
-import _
+import {{ py_name }}
 
 
 class Template(tornado.web.RequestHandler):
@@ -28,6 +28,6 @@ class Protected(Template):
     def get_current_user(self):
         return self.session
 
-    @{{ py_name }}.auth.current_user
+    @tornado.web.authenticated
     def get(self, template=None, *args):
         super().get(template, *args)

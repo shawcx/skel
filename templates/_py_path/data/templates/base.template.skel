@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=0.5">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{{ proper_name }}">
   <title>{{ proper_name }}</title>
-  <link rel="icon"       type="image/x-icon" href="/static/favicon.ico">
-  <link rel="stylesheet" type="text/css"     href="/static/css/{{ lower_name }}.css" />
+  <link rel="icon"       type="image/x-icon" href="{{! static_url('favicon.ico', include_version=False) }}">
+  <link rel="stylesheet" type="text/css"     href="{{! static_url('css/{{ lower_name }}.css') }}" />
 </head>
 <body>
 {%! set nav_dashboard = "" %}
@@ -17,7 +16,7 @@
 {%! block nav %}
   <nav class="navbar navbar-expand-lg fixed-top border-bottom border-primary">
     <div class="container">
-      <a class="navbar-brand" href="/">Skeleton</a>
+      <a class="navbar-brand" href="/">{{ proper_name }}</a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-{{ lower_name }}" aria-controls="navbar-{{ lower_name }}" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -29,6 +28,7 @@
         </ul>
         <span class="navbar-text" id="navbar-time">
         </span>
+{%! if current_user %}
         <ul class="navbar-nav ms-auto">
           <li class="nav-item pe-4">
             <a class="nav-link"><i class="fa fa-fw fa-user"></i>{{! current_user['username'] }}</a>
@@ -37,11 +37,12 @@
             <a class="btn btn-warning" href="/logout" title="Logout"><i class="fa fa-fw fa-right-from-bracket"></i></a>
           </li>
         </ul>
+{%! end %}
       </div>
     </div>
   </nav>
 {%! end %}
   <div class="container">{%! block body %}{%! end %}</div>
-</body>
 {%! block scripts %}{%! end %}
+</body>
 </html>

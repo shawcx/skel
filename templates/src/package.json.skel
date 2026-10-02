@@ -1,16 +1,20 @@
-{
+{% import json %}{
   "name": "{{ lower_name }}",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "{{ proper_name }}",
-  "browser": "{{ lower_name }}.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "private": true,
+  "author": {{ json.dumps(__author__) }},
+  "license": {{ json.dumps(__license__ or 'UNLICENSED') }},
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "@popperjs/core": "^2.11.8",
+    "backbone": "^1.6.1",
+    "bootstrap": "^5.3.8",
+    "jquery": "^4.0.0",
+    "underscore": "^1.13.8"
   },
-  "keywords": [],
-  "author": "TODO",
-  "license": "TODO",
-  "repository": {
-    "type": "git",
-    "url": "TODO"
+  "devDependencies": {
+    "browserify": "^17.0.1",
+    "sass": "^1.102.0"
   }
 }

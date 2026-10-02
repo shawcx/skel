@@ -1,0 +1,17 @@
+# {{ proper_name }}
+
+## Build
+
+    make            # build the web assets in src/ (runs npm install on first use)
+    make run        # run from the source tree on http://127.0.0.1:8080/
+    make install    # pip install the package
+
+## Configuration
+
+Settings are read from the `[{{ lower_name }}]` section of these ini files, in order:
+
+- `{{ py_path }}/data/{{ lower_name }}.ini`
+- `{{ py_path }}/data/{{ lower_name }}.ini.local`
+- `/etc/{{ namespace or lower_name }}/{{ lower_name }}.ini`
+- `~/.{{ lower_name }}.ini`
+- any file passed with `--ini`

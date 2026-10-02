@@ -27,7 +27,10 @@ class {{ proper_name }} {
 
     start(promises) {
         Promise.all(promises).then(() => {
-            this.socket = new SkeletonSocket({
+            this.socket = new Socket({
+                onopen: () => {
+                    this._events.trigger('connected')
+                },
                 onmessage: (msg) => {
                     let action = msg.action
                     delete msg.action
@@ -70,3 +73,11 @@ class {{ proper_name }} {
         }
     }
 }
+
+window.app = new {{ proper_name }}()
+
+$(document).ready(function() {
+    app.start([])
+})
+
+module.exports = {{ proper_name }}

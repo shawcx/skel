@@ -1,6 +1,7 @@
 
 import asyncio
 import logging
+import secrets
 import signal
 import traceback
 
@@ -13,6 +14,7 @@ import {{ py_name }}
 {{ py_name }}.HTTPError = tornado.web.HTTPError
 
 from . import settings
+from . import handlers
 
 
 class {{ proper_name }}(tornado.web.Application):
@@ -27,7 +29,7 @@ class {{ proper_name }}(tornado.web.Application):
             logging.error('%s', e)
 
     async def _async_main(self):
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
 
         signal.signal(signal.SIGINT,  self.__signalHandler)
@@ -35,6 +37,8 @@ class {{ proper_name }}(tornado.web.Application):
 
         self.patterns = []
         self.settings = {}
+        self._records_patterns = []
+        self._login_patterns = []
 
         {{ py_name }}.argparser.add_argument('--address', '-a',
             metavar='<address>',
@@ -60,20 +64,9 @@ class {{ proper_name }}(tornado.web.Application):
             except {{ py_name }}.error as e:
                 logging.error('%s', e)
 
-        #for name,component in _.caches.items():
-        #    await component.close()
-
-        #for name,component in _.databases.items():
-        #    await component.close()
-
     async def _async_init(self, **kwds):
-        {{ py_name }}.sessions = {{ py_name }}.config.get('{{ lower_name }}', 'sessions', fallback=None)
-        #if _.sessions:
-        #    logging.debug('Sessions cache: %s', _.sessions)
-        #    try:
-        #        _.sessions = _.caches[_.sessions]
-        #    except KeyError:
-        #        raise _.error('Unknown sessions cache instance: %s', _.sessions)
+        # a sessions component must provide load_session() and cookie_secret()
+        {{ py_name }}.sessions = None
 
         self.settings['static_path']   = {{ py_name }}.data('static')
         self.settings['template_path'] = {{ py_name }}.data('templates')
@@ -81,21 +74,21 @@ class {{ proper_name }}(tornado.web.Application):
         if 'cookie_secret' not in self.settings:
             self.settings['cookie_secret'] = await self.cookie_secret()
 
-        # call the underscore application's entry point
+        # call the application's entry point
         try:
             await {{ py_name }}.wait(self.initialize())
         except NotImplementedError:
             logging.warning('No "initialize" function defined')
 
-        patterns = [] #list(self._records_patterns)
+        patterns = list(self._records_patterns)
 
-        #if self._login_patterns:
-        #    patterns.extend(self._login_patterns)
-        #    patterns.extend([
-        #        ( r'/login',  {{ py_name }}.logins.LoginPage ),
-        #        ( r'/logout', {{ py_name }}.logins.Logout    ),
-        #        ])
-        #    self.settings['login_url'] = '/login'
+        if self._login_patterns:
+            patterns.extend(self._login_patterns)
+            patterns.extend([
+                ( r'/login',  {{ py_name }}.logins.LoginPage ),
+                ( r'/logout', {{ py_name }}.logins.Logout    ),
+                ])
+            self.settings['login_url'] = '/login'
 
         patterns.extend(self.patterns)
 
@@ -107,7 +100,7 @@ class {{ proper_name }}(tornado.web.Application):
             patterns = [(f'{prefix}{r[0]}',) + tuple(r[1:]) for r in patterns]
         else:
             patterns.append(
-                ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':''}),
+                ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':self.settings['static_path']}),
                 )
 
         if {{ py_name }}.args.debug:
@@ -123,15 +116,18 @@ class {{ proper_name }}(tornado.web.Application):
         await {{ py_name }}.wait(self.on_stop())
 
     async def initialize(self):
-        '''underscore app entry point'''
-        raise NotImplementedError
+        '''application entry point, add patterns and settings here'''
+        self.patterns.extend([
+            ( r'/',   handlers.Template  ),
+            ( r'/ws', handlers.WebSocket ),
+            ])
 
     async def logging(self):
-        '''underscore apps can override or extend this function'''
+        '''applications can override or extend this function'''
 
         # add the handlers to the logger
         if {{ py_name }}.config.getboolean('{{ lower_name }}', 'logging', fallback=False):
-            full_path = {{ py_name }}.paths(f'{{ lower_name }}.log')
+            full_path = {{ py_name }}.data('{{ lower_name }}.log')
             file_logger = logging.FileHandler(full_path)
             file_logger.setLevel(logging.DEBUG if {{ py_name }}.args.debug else logging.INFO)
             file_logger.setFormatter(
@@ -212,7 +208,7 @@ class {{ proper_name }}(tornado.web.Application):
             self.listen({{ py_name }}.args.port, {{ py_name }}.args.address, **kwds)
             logging.info('Listening on %s:%d', {{ py_name }}.args.address, {{ py_name }}.args.port)
         except Exception as e:
-            raise _.error('%s', e) from None
+            raise {{ py_name }}.error('%s', e) from None
 
     def _record_handler(self, component, cls):
         '''called from {{ py_name }}.records component to add handler'''
@@ -227,19 +223,23 @@ class {{ proper_name }}(tornado.web.Application):
             )
 
     async def cookie_secret(self):
-        '''underscore apps can override this function'''
+        '''applications can override this function'''
         if {{ py_name }}.sessions is not None:
             return await {{ py_name }}.wait({{ py_name }}.sessions.cookie_secret())
+        secret = {{ py_name }}.config.get('{{ lower_name }}', 'cookie_secret', fallback=None)
+        if not secret:
+            logging.debug('No cookie_secret configured, sessions will not survive a restart')
+            secret = secrets.token_hex(32)
+        return secret
 
     async def on_login_success(self, handler, user, *args, **kwds):
-        '''underscore apps should override this function if a login component is specified'''
+        '''applications should override this function if a login component is specified'''
         raise NotImplementedError
 
     async def on_login_failure(self, component, *args, **kwds):
-        '''underscore apps should override this function if a login component is specified'''
+        '''applications should override this function if a login component is specified'''
         pass
 
     async def on_logout(self, sessions_id):
-        '''underscore apps should override this function if a login component is specified'''
+        '''applications should override this function if a login component is specified'''
         pass
-
