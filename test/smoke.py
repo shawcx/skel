@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import zipfile
 
 import tornado.httpclient
 import tornado.websocket
@@ -54,54 +55,70 @@ async def check_websockets(port):
         raise AssertionError('cross-origin WebSocket was accepted')
 
 
+def check(tmp, namespace):
+    project = os.path.join(tmp, namespace or 'none', 'smoke')
+    module  = f'{namespace}.smoke' if namespace else 'smoke'
+    package = os.path.join(project, *module.split('.'))
+    env = dict(os.environ, PYTHONPATH=project)
+
+    args = ['--namespace', namespace] if namespace else []
+
+    step('generate')
+    run(sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke')
+    assert os.path.isfile(os.path.join(package, 'smoke.py')), package
+
+    step('compile')
+    run(sys.executable, '-m', 'compileall', '-q', project)
+
+    step('version')
+    out = subprocess.run([sys.executable, '-m', module, '--version'],
+        env=env, check=True, capture_output=True, text=True).stdout
+    assert '0.1.0' in out, out
+
+    step('serve')
+    port = free_port()
+    server = subprocess.Popen([sys.executable, '-m', module, '--port', str(port)],
+        env=env, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/') as rsp:
+                    body = rsp.read().decode()
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError('server did not respond')
+        assert '<title>Smoke</title>' in body, body
+
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/favicon.ico') as rsp:
+            assert rsp.status == 200
+
+        asyncio.run(check_websockets(port))
+    finally:
+        server.terminate()
+        server.wait(5)
+
+    step('wheel')
+    dist = os.path.join(project, 'dist')
+    run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
+        '-q', '-w', dist, project)
+    wheel = os.listdir(dist)
+    assert wheel == ['smoke-0.1.0-py3-none-any.whl'], wheel
+
+    # the package and its data files must be inside the wheel
+    with zipfile.ZipFile(os.path.join(dist, wheel[0])) as zf:
+        names = zf.namelist()
+    prefix = module.replace('.', '/')
+    for name in ('smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html'):
+        assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        project = os.path.join(tmp, 'smoke')
-        package = os.path.join(project, 'skunk', 'smoke')
-        env = dict(os.environ, PYTHONPATH=project)
-
-        step('generate')
-        run(sys.executable, os.path.join(ROOT, 'skel.py'), '--namespace', 'skunk', '--output', project, 'Smoke')
-
-        step('compile')
-        run(sys.executable, '-m', 'compileall', '-q', project)
-
-        step('version')
-        out = subprocess.run([sys.executable, '-m', 'skunk.smoke', '--version'],
-            env=env, check=True, capture_output=True, text=True).stdout
-        assert '0.1.0' in out, out
-
-        step('serve')
-        port = free_port()
-        server = subprocess.Popen([sys.executable, '-m', 'skunk.smoke', '--port', str(port)],
-            env=env, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            for _ in range(50):
-                try:
-                    with urllib.request.urlopen(f'http://127.0.0.1:{port}/') as rsp:
-                        body = rsp.read().decode()
-                    break
-                except OSError:
-                    time.sleep(0.1)
-            else:
-                raise AssertionError('server did not respond')
-            assert '<title>Smoke</title>' in body, body
-
-            with urllib.request.urlopen(f'http://127.0.0.1:{port}/favicon.ico') as rsp:
-                assert rsp.status == 200
-
-            asyncio.run(check_websockets(port))
-        finally:
-            server.terminate()
-            server.wait(5)
-
-        step('wheel')
-        run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
-            '-q', '-w', os.path.join(tmp, 'dist'), project)
-        wheel = os.listdir(os.path.join(tmp, 'dist'))
-        assert wheel == ['smoke-0.1.0-py3-none-any.whl'], wheel
-
-        assert os.path.isfile(os.path.join(package, 'data', 'static', 'favicon.ico'))
+        for namespace in ('skunk', ''):
+            print(f'== namespace {namespace!r}', flush=True)
+            check(tmp, namespace)
 
     print('ok')
     return 0
