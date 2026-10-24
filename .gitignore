@@ -1,3 +1,6 @@
 *.pyc
 /projects
 /.venv
+/build/
+/dist/
+*.egg-info/

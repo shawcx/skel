@@ -1,0 +1,24 @@
+[build-system]
+requires      = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "skel"
+version         = "0.1.0"
+description     = "Generate Tornado web apps and asyncio services"
+readme          = "README.md"
+requires-python = ">=3.11"
+authors         = [{ name = "Matthew Shaw" }]
+dependencies    = [
+    "tornado>=6.4",
+]
+
+[project.scripts]
+skel = "skel:main"
+
+[tool.setuptools]
+packages = ["skel"]
+
+[tool.setuptools.package-data]
+# glob skips names that start with a dot, so they need their own patterns
+skel = ["templates/**/*", "templates/**/.*", "templates/**/.*/**/*"]

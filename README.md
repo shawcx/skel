@@ -5,18 +5,23 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend, or w
 
 ## Usage
 
-    ./skel.py [--namespace <namespace>] [--output <directory>] [--with <feature>,...]
-              [--without <feature>,...] [--force] [-V] <Project>
+    skel [--namespace <namespace>] [--output <directory>] [--with <feature>,...]
+         [--without <feature>,...] [--set <key>=<value>] [--git] [--force] [-V] <Project>
 
-    make run NAME=Slog NS=skunk     # same as ./skel.py --force --namespace skunk Slog
+Install the `skel` command with `pipx install .` (or `uv tool install .`), or run
+`./skel.py` from a checkout. In a checkout:
+
+    make run NAME=Slog NS=skunk     # ./skel.py --force --namespace skunk --output projects/slog Slog
     make run WITH=systemd           # also passes --with systemd
     make run WITHOUT=web            # also passes --without web
     make test                       # generate projects into a temp directory and check they work
     make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
     make test-docker                # build and run a web app and a service with docker compose
 
-Projects are created in `projects/<project>` unless `--output` is given. An existing
-project is only overwritten with `--force`. Requires Python 3.11+ and `tornado`.
+Projects are created in `<project>` in the current directory unless `--output` is given.
+An existing project is only overwritten with `--force`. `--git` makes the project a git
+repository and commits it, with its features in the message. Requires Python 3.11+ and
+`tornado`.
 
 `make test` also needs `pytest`, and SQLAlchemy and aiosqlite for the `sqlite` feature. It
 uses `.venv` if there is one, which can be made with:
@@ -26,15 +31,21 @@ uses `.venv` if there is one, which can be made with:
 The generated project has its own README. Run `make` in it to build the web assets,
 which needs `npm`, then `make run`.
 
-## values.txt
+## Values
 
-Optional `key = value` lines that fill in project metadata (`version.py`,
-`pyproject.toml`, `package.json`). Supported keys are `__author__`, `__email__`,
-`__license__` and `__url__`. Lines starting with `#` are ignored.
+Optional values fill in project metadata (`version.py`, `pyproject.toml`, `package.json`):
+`author`, `email`, `license` and `url`. They're read in this order, later ones winning:
+
+- `values.txt` in a checkout of skel
+- `~/.config/skel/values.txt`, or `%APPDATA%\skel\values.txt` on Windows
+- `--set <key>=<value>` options
+
+The files have `key = value` lines, and lines starting with `#` are ignored. Keys can be
+written with or without the underscores, `author` or `__author__`.
 
 ## Templates
 
-Everything under `templates/` is copied into the new project:
+Everything under `skel/templates/` is copied into the new project:
 
 - Files ending in `.skel` are rendered as Tornado templates and the suffix is dropped.
   Use `{{! ... }}` and `{%! ... %}` to emit template syntax into the output,
@@ -50,7 +61,7 @@ Everything under `templates/` is copied into the new project:
 | `py_path`     | `skunk/slog`                    |
 | `py_name`     | `skunk.slog`                    |
 
-The same keys, plus the `values.txt` keys, are available inside `.skel` templates.
+The same keys, plus the values as `__author__` and so on, are available inside `.skel` templates.
 
 A line holding only a `{% %}` tag is removed along with the tag, so blocks don't
 leave blank lines in the output.
@@ -58,9 +69,9 @@ leave blank lines in the output.
 ## Features
 
 Optional features are added with `--with`, and `web` and `frontend`, which are on by
-default, are left out with `--without`. Each feature is a `templates/+<feature>/`
-directory, laid out like `templates/`, whose files are added to the project. A feature
-can't replace a file that `templates/` or another feature creates. Shared templates
+default, are left out with `--without`. Each feature is a `skel/templates/+<feature>/`
+directory, laid out like `skel/templates/`, whose files are added to the project. A feature
+can't replace a file that `skel/templates/` or another feature creates. Shared templates
 check the sorted `features` list instead:
 
     {% if 'systemd' in features %}
@@ -70,7 +81,7 @@ check the sorted `features` list instead:
 A template that renders to nothing isn't created, so a feature's file can depend on
 another feature by wrapping all of it in an `{% if %}`.
 
-`DEFAULTS` and `REQUIRES` in `skel.py` list the default features and the features that
+`DEFAULTS` and `REQUIRES` in `skel/__init__.py` list the default features and the features that
 need others. Leaving out a feature also leaves out the default features that need it,
 so `--without web` also leaves out `frontend`.
 

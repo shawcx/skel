@@ -11,7 +11,7 @@ WITHOUT ?=
 all:
 
 run:
-	./skel.py --force $(if $(NS),--namespace $(NS)) $(if $(WITH),--with $(WITH)) $(if $(WITHOUT),--without $(WITHOUT)) $(NAME)
+	./skel.py --force --output projects/$(shell echo $(NAME) | tr A-Z a-z) $(if $(NS),--namespace $(NS)) $(if $(WITH),--with $(WITH)) $(if $(WITHOUT),--without $(WITHOUT)) $(NAME)
 
 test:
 	$(PYTHON) test/smoke.py

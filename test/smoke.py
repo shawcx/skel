@@ -8,6 +8,7 @@ import asyncio
 import http.cookies
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -195,6 +196,79 @@ def check_options(tmp):
             capture_output=True, text=True)
         assert out.returncode == 2 and error in out.stderr, (args, out)
         assert not os.path.exists(project), project
+
+
+def files(top):
+    '''the contents of every file under top, by path'''
+    found = {}
+    for base,directories,filenames in os.walk(top):
+        for filename in filenames:
+            path = os.path.join(base, filename)
+            with open(path, 'rb') as fp:
+                found[os.path.relpath(path, top)] = fp.read()
+    return found
+
+
+def check_skel(tmp):
+    '''values, --git, and skel installed from its wheel'''
+    skel = [sys.executable, os.path.join(ROOT, 'skel.py')]
+    # the user's values.txt, and git without the user's own settings
+    config = os.path.join(tmp, 'config')
+    os.makedirs(os.path.join(config, 'skel'))
+    with open(os.path.join(config, 'skel', 'values.txt'), 'w') as fp:
+        fp.write('__author__ = User\n__email__ = user@example.com\nlicense = MIT\n__url__ = https://example.com\n')
+    gitconfig = os.path.join(tmp, 'gitconfig')
+    open(gitconfig, 'w').close()
+    env = dict(os.environ, XDG_CONFIG_HOME=config, GIT_CONFIG_GLOBAL=gitconfig, GIT_CONFIG_NOSYSTEM='1',
+        GIT_AUTHOR_NAME='Test', GIT_AUTHOR_EMAIL='test@example.com',
+        GIT_COMMITTER_NAME='Test', GIT_COMMITTER_EMAIL='test@example.com')
+
+    step('values')
+    # --set wins over the user's values.txt, which wins over skel's
+    project = os.path.join(tmp, 'values')
+    run(*skel, '--set', 'author=Cli', '--output', project, 'Smoke', env=env)
+    with open(os.path.join(project, 'smoke', 'version.py')) as fp:
+        version = fp.read()
+    for line in ("'Cli'", "'user@example.com'", "'MIT'", "'https://example.com'"):
+        assert line in version, version
+    for args,error in [(['--set', 'nope=x'], 'unknown key for --set: nope'), (['--set', 'author'], 'expects <key>=<value>')]:
+        out = subprocess.run([*skel, *args, '--output', os.path.join(tmp, 'bad'), 'Smoke'],
+            env=env, capture_output=True, text=True)
+        assert out.returncode == 2 and error in out.stderr, out
+
+    step('git')
+    project = os.path.join(tmp, 'git')
+    run(*skel, '--git', '--with', 'sqlite', '--output', project, 'Smoke', env=env)
+    def git(*args):
+        return subprocess.run(['git', '-C', project, *args], env=env, capture_output=True, text=True, check=True).stdout
+    message = git('log', '--format=%B')
+    assert 'Generate Smoke with skel' in message and 'Features: frontend, sqlite, web' in message, message
+    assert git('status', '--porcelain') == '', 'files left out of the commit'
+    # again over the same files there's nothing to commit
+    out = subprocess.run([*skel, '--git', '--force', '--with', 'sqlite', '--output', project, 'Smoke'],
+        env=env, capture_output=True, text=True)
+    assert out.returncode == 0 and 'Nothing changed' in out.stdout, out
+    assert len(git('log', '--format=%H').split()) == 1
+
+    step('install skel')
+    # build from a copy, so the build doesn't leave files in the checkout
+    source = os.path.join(tmp, 'source')
+    shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns('.git', '.venv', 'projects', 'build',
+        'dist', '*.egg-info', '__pycache__'))
+    wheels = os.path.join(tmp, 'wheels')
+    run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation', '-q', '-w', wheels, source)
+    site = os.path.join(tmp, 'site')
+    run(sys.executable, '-m', 'pip', 'install', '--no-deps', '-q', '--target', site,
+        os.path.join(wheels, os.listdir(wheels)[0]))
+    # an installed skel makes the same files as the checkout, in the current directory
+    everything = ['--with', 'auth,docker,github,gitlab,nginx,sqlite,systemd']
+    run(*skel, *everything, '--output', os.path.join(tmp, 'checkout', 'smoke'), 'Smoke', env=env)
+    os.makedirs(os.path.join(tmp, 'installed'))
+    run(sys.executable, '-m', 'skel', *everything, 'Smoke',
+        env=dict(env, PYTHONPATH=site), cwd=os.path.join(tmp, 'installed'))
+    checkout,installed = files(os.path.join(tmp, 'checkout')), files(os.path.join(tmp, 'installed'))
+    assert checkout.keys() == installed.keys(), sorted(checkout.keys() ^ installed.keys())
+    assert checkout == installed, [path for path in checkout if checkout[path] != installed[path]]
 
 
 def check(tmp, namespace, features, prefix):
@@ -428,6 +502,7 @@ def main():
             return 1
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
+        check_skel(tmp)
         everything = ['auth', 'docker', 'frontend', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd', 'web']
         for namespace,features,prefix in [
                 ('skunk', DEFAULTS, ''),
