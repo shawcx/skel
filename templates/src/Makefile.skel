@@ -1,6 +1,6 @@
 
 SASS       = ./node_modules/.bin/sass
-BROWSERIFY = ./node_modules/.bin/browserify
+ESBUILD    = ./node_modules/.bin/esbuild
 
 STATIC_ROOT = ../{{ py_path }}/data/static
 
@@ -38,8 +38,8 @@ node_modules: package.json
 
 $(JS_OUT): $(JS_FILES) node_modules
 	@mkdir -p $(dir $@)
-	@echo browserify $(JS_FILE) '=>' $@
-	@$(BROWSERIFY) $(JS_FILE) -o $@
+	@echo esbuild $(JS_FILE) '=>' $@
+	@$(ESBUILD) $(JS_FILE) --bundle --minify --sourcemap --log-level=warning --outfile=$@
 
 $(CSS_OUT): $(CSS_SRC) node_modules
 	@mkdir -p $(dir $@)
@@ -49,7 +49,7 @@ $(CSS_OUT): $(CSS_SRC) node_modules
 clean:
 
 distclean: clean
-	@rm -vf $(CSS_OUT)
-	@rm -vf $(JS_OUT)
+	@rm -vf $(CSS_OUT) $(CSS_OUT).map
+	@rm -vf $(JS_OUT) $(JS_OUT).map
 	@rm -rf $(WEBFONTS)
 	@rm -rf node_modules
