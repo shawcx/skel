@@ -42,3 +42,13 @@ jobs:
         run: command -v make || choco install make --no-progress
       - run: python -m pip install tornado
       - run: python test/frontend.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: python -m pip install tornado
+      - run: python test/docker.py

@@ -1,5 +1,6 @@
 {% if 'frontend' in features %}
-# build the web assets with npm, then install the app into a slim Python image
+# build the web assets with npm, then the wheel, and install only the wheel
+# into a slim Python image, so the source tree isn't in any of its layers
 FROM node:24.22 AS frontend
 WORKDIR /build/src
 COPY src/package.json ./
@@ -8,16 +9,24 @@ COPY src/ ./
 RUN make
 
 {% end %}
+{% if 'frontend' not in features %}
+# build the wheel, and install only the wheel into a slim Python image, so the
+# source tree isn't in any of its layers
+{% end %}
+FROM python:3.15-slim AS wheel
+COPY . /build
+{% if 'frontend' in features %}
+COPY --from=frontend /build/{{ py_path }}/data/static /build/{{ py_path }}/data/static
+{% end %}
+RUN pip wheel --no-cache-dir --no-deps --wheel-dir /wheels /build
+
 FROM python:3.15-slim
 
 # the app runs as an unprivileged user whose home, /data, holds its files
 RUN useradd --system --uid 1000 --home-dir /data --create-home {{ lower_name }}
 
-COPY . /build
-{% if 'frontend' in features %}
-COPY --from=frontend /build/{{ py_path }}/data/static /build/{{ py_path }}/data/static
-{% end %}
-RUN pip install --no-cache-dir --root-user-action=ignore /build && rm -rf /build
+RUN --mount=type=bind,from=wheel,source=/wheels,target=/wheels \
+    pip install --no-cache-dir --root-user-action=ignore /wheels/*.whl
 
 # settings for the container, ~/.{{ lower_name }}.ini in the data volume can change them
 COPY docker/{{ lower_name }}.ini /etc/{{ namespace or lower_name }}/{{ lower_name }}.ini

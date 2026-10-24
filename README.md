@@ -13,6 +13,7 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend, or w
     make run WITHOUT=web            # also passes --without web
     make test                       # generate projects into a temp directory and check they work
     make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
+    make test-docker                # build and run a web app and a service with docker compose
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
 project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.

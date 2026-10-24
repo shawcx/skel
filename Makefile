@@ -1,4 +1,4 @@
-.PHONY: all run test test-frontend
+.PHONY: all run test test-frontend test-docker
 
 # the test venv if there is one, see README.md
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
@@ -18,3 +18,6 @@ test:
 
 test-frontend:
 	$(PYTHON) test/frontend.py
+
+test-docker:
+	$(PYTHON) test/docker.py
