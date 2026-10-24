@@ -2,6 +2,7 @@
 import sys
 import os
 import re
+import json
 import shutil
 import argparse
 import subprocess
@@ -10,6 +11,8 @@ from .jsxn import jsxn
 
 import tornado.template
 
+
+__version__ = '0.1.0'
 
 # resolve everything relative to this package, not the current directory
 ROOT      = os.path.dirname(os.path.abspath(__file__))
@@ -36,8 +39,16 @@ TAG_LINE = re.compile(r'^[ \t]*(\{%(?!!)(?:(?!%\}).)*%\})[ \t]*\r?\n', re.M)
 argparser = argparse.ArgumentParser(prog='skel')
 
 argparser.add_argument('project',
-    metavar='<project>',
+    metavar='<project>', nargs='?',
     help='project name')
+
+argparser.add_argument('--update',
+    metavar='<directory>',
+    help='update a project made by skel to the current templates, keeping its changes')
+
+argparser.add_argument('--dry-run',
+    action='store_true',
+    help='with --update, show what would change without changing anything')
 
 argparser.add_argument('--namespace',
     metavar='<namespace>', default='',
@@ -71,6 +82,9 @@ argparser.add_argument('--verbose', '-V',
     action='store_true',
     help='verbose output')
 
+argparser.add_argument('--version',
+    action='version', version=f'%(prog)s {__version__}')
+
 @jsxn
 class Project:
     namespace   : str
@@ -82,6 +96,25 @@ class Project:
     __email__   : str
     __license__ : str
     __url__     : str
+
+
+def split(options):
+    '''the features in --with or --without options, comma separated or repeated'''
+    return set(f for option in options for f in option.split(',') if f)
+
+
+def checkout():
+    '''the top of skel's git checkout and its commit, or None when skel is installed'''
+    top = os.path.dirname(ROOT)
+    out = subprocess.run(['git', '-C', top, 'rev-parse', '--show-toplevel', 'HEAD'],
+        capture_output=True, text=True) if shutil.which('git') else None
+    if not out or out.returncode:
+        return None
+    toplevel,commit = out.stdout.split()
+    # an installed skel can be inside some other repository, a venv in a project say
+    if os.path.realpath(toplevel) != os.path.realpath(top):
+        return None
+    return top,commit
 
 
 def user_values():
@@ -114,14 +147,16 @@ class Loader(tornado.template.Loader):
 
 
 class Skel:
-    def __init__(self):
+    def __init__(self, args):
         self.root = ROOT
         self.templates = TEMPLATES
 
-        self.args = argparser.parse_args()
+        self.args = args
+        if not args.project:
+            argparser.error('the project name is needed')
 
-        chosen  = set(f for arg in self.args.features for f in arg.split(',') if f)
-        without = set(f for arg in self.args.without  for f in arg.split(',') if f)
+        self.chosen  = chosen  = split(self.args.features)
+        self.without = without = split(self.args.without)
         for feature in sorted(chosen | without):
             if feature not in FEATURES:
                 argparser.error(f'unknown feature: {feature}, choose from {", ".join(FEATURES)}')
@@ -241,10 +276,27 @@ class Skel:
             f'Features: {", ".join(self.features) or "none"}')
         print('Committed to a git repository')
 
-    @classmethod
-    def main(cls):
-        self = cls()
+    def record(self):
+        '''write .skel.toml, which says how skel made the project for skel --update'''
+        found = checkout()
+        values = {key:self.project[f'__{key}__'] for key in self.keys()}
+        lines = [
+            '# how skel made this project, skel --update reads it',
+            f'version   = {json.dumps(__version__)}',
+            # the templates of a checkout match its commit only when they're committed
+            *([f'commit    = {json.dumps(found[1])}'] if found and not modified(found[0]) else []),
+            f'name      = {json.dumps(self.project.proper_name)}',
+            f'namespace = {json.dumps(self.project.namespace)}',
+            f'with      = {json.dumps(sorted(self.chosen))}',
+            f'without   = {json.dumps(sorted(self.without))}',
+            '',
+            '[values]',
+            *(f'{key:<7} = {json.dumps(value, ensure_ascii=False)}' for key,value in values.items()),
+            ]
+        with open(os.path.join(self.output, '.skel.toml'), 'w', encoding='utf-8', newline='\n') as fp:
+            fp.write('\n'.join(lines) + '\n')
 
+    def run(self):
         if os.path.exists(self.output) and not self.args.force:
             print(f'{self.output} already exists, use --force to overwrite', file=sys.stderr)
             return 1
@@ -283,6 +335,7 @@ class Skel:
             if self.args.verbose:
                 print(path, '=>', display(dest))
 
+        self.record()
         print(f'Created {display(self.output)}')
 
         if self.args.git:
@@ -294,5 +347,20 @@ class Skel:
         return 0
 
 
+def modified(top):
+    '''true if the templates or code in a checkout have changes that aren't committed'''
+    out = subprocess.run(['git', '-C', top, 'status', '--porcelain', '--', 'skel'],
+        capture_output=True, text=True)
+    return bool(out.stdout.strip())
+
+
 def main():
-    return Skel.main()
+    args = argparser.parse_args()
+    if args.update:
+        if args.project:
+            argparser.error('--update takes the project directory instead of a name')
+        from . import update
+        return update.update(args)
+    if args.dry_run:
+        argparser.error('--dry-run only works with --update')
+    return Skel(args).run()

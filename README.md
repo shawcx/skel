@@ -7,6 +7,7 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend, or w
 
     skel [--namespace <namespace>] [--output <directory>] [--with <feature>,...]
          [--without <feature>,...] [--set <key>=<value>] [--git] [--force] [-V] <Project>
+    skel --update <directory> [--with <feature>,...] [--without <feature>,...] [--dry-run]
 
 Install the `skel` command with `pipx install .` (or `uv tool install .`), or run
 `./skel.py` from a checkout. In a checkout:
@@ -30,6 +31,23 @@ uses `.venv` if there is one, which can be made with:
 
 The generated project has its own README. Run `make` in it to build the web assets,
 which needs `npm`, then `make run`.
+
+## Updating projects
+
+Every project has a `.skel.toml` that records the skel version, skel's commit when it ran
+from a checkout with no changes to `skel/`, and the name, namespace, features and values.
+`skel --update <directory>` reads it and renders the project twice, with the skel that made
+it and with the current one, and then brings the difference into the project:
+
+- files that only skel changed are updated, and new ones are added
+- files that only the project changed are kept
+- files that both changed are merged with `git merge-file`, and lines changed on both
+  sides get conflict markers, which make `--update` exit with 1
+- files that skel no longer makes are kept
+
+`--with` and `--without` add or remove features as part of the update, and `--dry-run`
+shows what would change. It needs git and a checkout of skel, which has the old templates
+in its history: the recorded commit, or the tag `v<version>` when there isn't one.
 
 ## Values
 

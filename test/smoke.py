@@ -271,6 +271,87 @@ def check_skel(tmp):
     assert checkout == installed, [path for path in checkout if checkout[path] != installed[path]]
 
 
+def check_update(tmp):
+    '''skel --update with a copy of skel in a git repository, changed between two commits'''
+    step('update')
+    gitconfig = os.path.join(tmp, 'gitconfig-update')
+    open(gitconfig, 'w').close()
+    env = dict(os.environ, GIT_CONFIG_GLOBAL=gitconfig, GIT_CONFIG_NOSYSTEM='1',
+        GIT_AUTHOR_NAME='Test', GIT_AUTHOR_EMAIL='test@example.com',
+        GIT_COMMITTER_NAME='Test', GIT_COMMITTER_EMAIL='test@example.com')
+    repo = os.path.join(tmp, 'skel-repo')
+    shutil.copytree(ROOT, repo, ignore=shutil.ignore_patterns('.git', '.venv', 'projects', 'build',
+        'dist', '*.egg-info', '__pycache__'))
+    def git(*args):
+        return subprocess.run(['git', '-C', repo, *args], env=env, capture_output=True, text=True, check=True).stdout
+    git('init', '-q')
+    git('add', '--all')
+    git('commit', '-q', '-m', 'v1')
+    skel = [sys.executable, os.path.join(repo, 'skel.py')]
+    templates = os.path.join(repo, 'skel', 'templates')
+
+    project = os.path.join(tmp, 'updated')
+    run(*skel, '--with', 'sqlite', '--output', project, 'Rec', env=env)
+    with open(os.path.join(project, '.skel.toml')) as fp:
+        assert git('rev-parse', 'HEAD').strip() in fp.read(), 'commit not recorded'
+
+    def edit(path, old, new):
+        with open(path) as fp:
+            text = fp.read()
+        assert old in text, (path, old)
+        with open(path, 'w') as fp:
+            fp.write(text.replace(old, new, 1))
+
+    # changes in the project
+    with open(os.path.join(project, 'README.md'), 'a') as fp:
+        fp.write('\nMy notes\n')
+    edit(os.path.join(project, 'Makefile'), '-m pytest', '-m pytest -x')
+
+    # changes in skel: one that merges with the README's, one that conflicts with
+    # the Makefile's, one the project didn't touch, a new file and a removed one
+    edit(os.path.join(templates, 'README.md.skel'), '# {{ proper_name }}', '# {{ proper_name }} app')
+    edit(os.path.join(templates, 'Makefile.skel'), '-m pytest', '-m pytest -q')
+    edit(os.path.join(templates, '+sqlite', '_py_path', 'models.py.skel'), 'an example table', 'an example table v2')
+    with open(os.path.join(templates, 'NOTES.md.skel'), 'w') as fp:
+        fp.write('Notes for {{ proper_name }}\n')
+    os.remove(os.path.join(templates, '+frontend', 'src', 'js', 'socket.js'))
+    git('add', '--all')
+    git('commit', '-q', '-m', 'v2')
+
+    before = files(project)
+    out = subprocess.run([*skel, '--update', project, '--dry-run'], env=env, capture_output=True, text=True)
+    assert out.returncode == 1 and 'conflict  Makefile' in out.stdout, out
+    assert files(project) == before, 'the dry run changed files'
+
+    out = subprocess.run([*skel, '--update', project], env=env, capture_output=True, text=True)
+    assert out.returncode == 1, out
+    for line in ('merged    README.md', 'conflict  Makefile', 'updated   rec/models.py', 'added     NOTES.md',
+            'kept      src/js/socket.js'):
+        assert line in out.stdout, (line, out.stdout)
+    after = files(project)
+    readme = after['README.md'].decode()
+    assert readme.startswith('# Rec app\n') and readme.endswith('My notes\n'), readme
+    makefile = after['Makefile'].decode()
+    assert '<<<<<<< yours' in makefile and '-m pytest -x' in makefile and '-m pytest -q' in makefile, makefile
+    assert b'an example table v2' in after[os.path.join('rec', 'models.py')]
+    assert after['NOTES.md'] == b'Notes for Rec\n'
+    assert os.path.join('src', 'js', 'socket.js') in after
+    assert git('rev-parse', 'HEAD').strip().encode() in after['.skel.toml']
+
+    # with the conflict resolved, taking skel's Makefile, an update can add a feature
+    run(*skel, '--output', os.path.join(tmp, 'fresh'), '--with', 'sqlite', 'Rec', env=env)
+    with open(os.path.join(project, 'Makefile'), 'wb') as fp:
+        fp.write(files(os.path.join(tmp, 'fresh'))['Makefile'])
+    out = subprocess.run([*skel, '--update', project, '--with', 'docker'], env=env, capture_output=True, text=True)
+    assert out.returncode == 0 and 'added     Dockerfile' in out.stdout, out
+    with open(os.path.join(project, '.skel.toml')) as fp:
+        assert 'with      = ["docker", "sqlite"]' in fp.read()
+
+    # a project that skel --update can't read
+    out = subprocess.run([*skel, '--update', os.path.join(tmp, 'fresh', 'rec')], env=env, capture_output=True, text=True)
+    assert out.returncode == 2 and 'no .skel.toml' in out.stderr, out
+
+
 def check(tmp, namespace, features, prefix):
     project = os.path.join(tmp, '-'.join([namespace or 'none', *features]), 'smoke')
     module  = f'{namespace}.smoke' if namespace else 'smoke'
@@ -503,6 +584,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
         check_skel(tmp)
+        check_update(tmp)
         everything = ['auth', 'docker', 'frontend', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd', 'web']
         for namespace,features,prefix in [
                 ('skunk', DEFAULTS, ''),
