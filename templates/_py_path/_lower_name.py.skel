@@ -91,8 +91,8 @@ class {{ proper_name }}(tornado.web.Application):
 {% end %}
 {% if 'auth' in features %}
 
-        # add a user instead of running
-        if auth.add_user():
+        # manage users instead of running
+        if auth.manage_users():
             return
 {% end %}
 
@@ -256,6 +256,11 @@ class {{ proper_name }}(tornado.web.Application):
     async def cookie_secret(self):
         '''applications can override this function'''
         secret = {{ py_name }}.config.get('{{ lower_name }}', 'cookie_secret', fallback=None)
+{% if 'auth' in features %}
+        if not secret:
+            # saved with the sessions, so logins survive a restart
+            secret = await {{ py_name }}.wait({{ py_name }}.sessions.cookie_secret())
+{% end %}
         if not secret:
             logging.debug('No cookie_secret configured, signed cookies will not survive a restart')
             secret = secrets.token_hex(32)
@@ -263,7 +268,8 @@ class {{ proper_name }}(tornado.web.Application):
 {% if 'auth' in features %}
 
     async def on_login_success(self, handler, username):
-        '''return the session for a user who logged in, it must have a session_id'''
+        '''return the session for a user who logged in, it must have a session_id
+           and keep the username, and is saved as JSON'''
         return {
             'session_id' : secrets.token_urlsafe(32),
             'username'   : username,

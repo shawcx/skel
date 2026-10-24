@@ -43,5 +43,6 @@ include = ["{{ namespace or lower_name }}*"]
     "data/{{ lower_name }}.log",
 {% if 'auth' in features %}
     "data/{{ lower_name }}.users",
+    "data/{{ lower_name }}.sessions",
 {% end %}
 ]

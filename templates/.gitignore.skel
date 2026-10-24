@@ -15,4 +15,5 @@ __pycache__/
 /{{ py_path }}/data/{{ lower_name }}.log
 {% if 'auth' in features %}
 /{{ py_path }}/data/{{ lower_name }}.users
+/{{ py_path }}/data/{{ lower_name }}.sessions
 {% end %}

@@ -38,6 +38,39 @@ def free_port():
         return s.getsockname()[1]
 
 
+class Server:
+    '''the generated app, on a new free port each time it starts'''
+
+    def __init__(self, module, env, cwd, prefix):
+        self.module = module
+        self.env    = env
+        self.cwd    = cwd
+        self.prefix = prefix
+
+    def start(self):
+        '''start the app and return its first page'''
+        self.port = free_port()
+        self.proc = subprocess.Popen([sys.executable, '-m', self.module, '--port', str(self.port)],
+            env=self.env, cwd=self.cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(50):
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{self.port}{self.prefix}/') as rsp:
+                    return rsp.read().decode()
+            except OSError:
+                time.sleep(0.1)
+        self.stop()
+        raise AssertionError('server did not respond')
+
+    def stop(self):
+        self.proc.terminate()
+        self.proc.wait(5)
+
+    def cli(self, *args):
+        '''run the app with other options, like --list-users'''
+        return subprocess.run([sys.executable, '-m', self.module, *args],
+            env=self.env, cwd=self.cwd, capture_output=True, text=True)
+
+
 async def refused(url, headers):
     request = tornado.httpclient.HTTPRequest(url, headers=headers)
     try:
@@ -70,7 +103,8 @@ def cookies(rsp):
     return {name:morsel.value for name,morsel in jar.items()}
 
 
-async def check_auth(port, prefix):
+async def check_auth(server):
+    prefix = server.prefix
     client = tornado.httpclient.AsyncHTTPClient()
 
     async def fetch(path, jar=None, **form):
@@ -79,7 +113,12 @@ async def check_auth(port, prefix):
             kwds['headers'] = {'Cookie':'; '.join(f'{k}={v}' for k,v in jar.items())}
         if form:
             kwds.update(method='POST', body=urllib.parse.urlencode(form))
-        return await client.fetch(f'http://127.0.0.1:{port}{prefix}{path}', **kwds)
+        return await client.fetch(f'http://127.0.0.1:{server.port}{prefix}{path}', **kwds)
+
+    async def log_in(jar):
+        rsp = await fetch('/login', jar, _xsrf=jar['_xsrf'], username='alice', password='secret')
+        assert rsp.code == 302, rsp
+        jar.update(cookies(rsp))
 
     home = prefix + '/'
 
@@ -87,7 +126,7 @@ async def check_auth(port, prefix):
     rsp = await fetch('/')
     login = f'{prefix}/login?' + urllib.parse.urlencode(dict(next=home))
     assert rsp.code == 302 and rsp.headers['Location'] == login, rsp
-    await refused(f'ws://127.0.0.1:{port}{prefix}/ws', {})
+    await refused(f'ws://127.0.0.1:{server.port}{prefix}/ws', {})
 
     # the login page sets the xsrf cookie, the form must send it back
     rsp = await fetch('/login?next=/')
@@ -107,13 +146,37 @@ async def check_auth(port, prefix):
 
     rsp = await fetch('/', jar)
     assert rsp.code == 200 and b'alice' in rsp.body, rsp
-    await check_websockets(port, prefix, {'Cookie':f'session_id={jar["session_id"]}'})
+    await check_websockets(server.port, prefix, {'Cookie':f'session_id={jar["session_id"]}'})
 
-    # logging out ends the session, not just the cookie
+    out = server.cli('--list-users')
+    assert out.returncode == 0 and out.stdout.split() == ['alice'], out
+
+    # the sessions and the secret that signs their cookies survive a restart
+    server.stop()
+    server.start()
+    rsp = await fetch('/', jar)
+    assert rsp.code == 200 and b'alice' in rsp.body, rsp
+
+    # logging out is a POST with the xsrf token, and ends the session, not just the cookie
     rsp = await fetch('/logout', jar)
+    assert rsp.code == 405, rsp
+    rsp = await fetch('/logout', jar, next='/')
+    assert rsp.code == 403, rsp
+    rsp = await fetch('/logout', jar, _xsrf=jar['_xsrf'])
     assert rsp.code == 302 and rsp.headers['Location'] == home, rsp
     rsp = await fetch('/', jar)
     assert rsp.code == 302, rsp
+
+    # removing a user ends their sessions while the app is running
+    await log_in(jar)
+    rsp = await fetch('/', jar)
+    assert rsp.code == 200, rsp
+    out = server.cli('--remove-user', 'alice')
+    assert out.returncode == 0, out
+    rsp = await fetch('/', jar)
+    assert rsp.code == 302, rsp
+    out = server.cli('--remove-user', 'alice')
+    assert out.returncode == 1 and 'No user: alice' in out.stderr, out
 
 
 def check_options(tmp):
@@ -153,7 +216,8 @@ def check(tmp, namespace, features, prefix):
             (os.path.join(static, 'favicon.ico'), False),
             (os.path.join(package, 'data', 'smoke.ini'), False),
             (os.path.join(project, 'src', 'package-lock.json'), False),
-            *([(os.path.join(package, 'data', 'smoke.users'), True)] if 'auth' in features else []),
+            *([(os.path.join(package, 'data', 'smoke.users'), True),
+               (os.path.join(package, 'data', 'smoke.sessions'), True)] if 'auth' in features else []),
             ]:
         rc = subprocess.run(['git', '-C', project, 'check-ignore', '-q', path]).returncode
         assert (rc == 0) == ignored, f'{path} should {"" if ignored else "not "}be ignored'
@@ -241,31 +305,26 @@ def check(tmp, namespace, features, prefix):
         assert rc == 2, f'--add-user without the feature exited with {rc}'
 
     step('serve')
-    port = free_port()
-    server = subprocess.Popen([sys.executable, '-m', module, '--port', str(port)],
-        env=env, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = Server(module, env, project, prefix)
+    body = server.start()
     try:
-        for _ in range(50):
-            try:
-                with urllib.request.urlopen(f'http://127.0.0.1:{port}{prefix}/') as rsp:
-                    body = rsp.read().decode()
-                break
-            except OSError:
-                time.sleep(0.1)
-        else:
-            raise AssertionError('server did not respond')
         assert '<title>Smoke</title>' in body, body
         # links and static files use the prefix
         assert f'data-prefix="{prefix}"' in body and f'href="{prefix}/static/' in body, body
 
         for path in [f'{prefix}/static/favicon.ico'] + ([] if prefix else ['/favicon.ico']):
-            with urllib.request.urlopen(f'http://127.0.0.1:{port}{path}') as rsp:
+            with urllib.request.urlopen(f'http://127.0.0.1:{server.port}{path}') as rsp:
                 assert rsp.status == 200, path
 
-        asyncio.run(check_auth(port, prefix) if 'auth' in features else check_websockets(port, prefix))
+        asyncio.run(check_auth(server) if 'auth' in features else check_websockets(server.port, prefix))
     finally:
-        server.terminate()
-        server.wait(5)
+        server.stop()
+
+    # only the owner can read the password hashes and the cookie secret
+    if 'auth' in features and os.name == 'posix':
+        for name in ('smoke.users', 'smoke.sessions'):
+            mode = os.stat(os.path.join(package, 'data', name)).st_mode & 0o777
+            assert mode == 0o600, f'{name} is {oct(mode)}'
 
     step('wheel')
     # files made at run time must stay out of the wheel
@@ -290,7 +349,7 @@ def check(tmp, namespace, features, prefix):
         expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
     for name in expected:
         assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
-    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users'):
+    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users', 'data/smoke.sessions'):
         assert f'{prefix}/{name}' not in names, f'{prefix}/{name} is in the wheel'
 
 

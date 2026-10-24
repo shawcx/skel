@@ -17,6 +17,9 @@ port    = 8080
 #expires = 24
 # user:hash lines written by --add-user, relative to the data directory
 #users = {{ lower_name }}.users
+# sessions and the cookie secret, so logins survive a restart, leave it
+# empty to keep sessions in memory
+#sessions = {{ lower_name }}.sessions
 {% end %}
 {% if 'nginx' in features %}
 

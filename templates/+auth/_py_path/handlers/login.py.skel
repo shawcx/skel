@@ -22,6 +22,8 @@ class Login(Handler):
             return
 
         session = await {{ py_name }}.wait(self.application.on_login_success(self, username))
+        # removing the user ends their sessions
+        session.setdefault('username', username)
         await {{ py_name }}.wait({{ py_name }}.sessions.save_session(session))
         self.set_signed_cookie('session_id', session['session_id'],
             expires_days = {{ py_name }}.auth.expires() / 24,
@@ -41,7 +43,10 @@ class Login(Handler):
 
 
 class Logout(Handler):
-    async def get(self):
+    async def post(self):
+        # a POST with an _xsrf token, so other sites can't log people out
+        self.check_xsrf_cookie()
+
         session_id = self.get_signed_cookie('session_id')
         if session_id:
             session_id = session_id.decode('utf-8')

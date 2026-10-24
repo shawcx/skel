@@ -31,7 +31,10 @@
             <a class="nav-link"><i class="fa fa-fw fa-user"></i>{{! current_user['username'] }}</a>
           </li>
           <li class="nav-item">
-            <a class="btn btn-warning" href="{{! prefix }}/logout" title="Logout"><i class="fa fa-fw fa-right-from-bracket"></i></a>
+            <form method="POST" action="{{! prefix }}/logout">
+              {%! module xsrf_form_html() %}
+              <button type="submit" class="btn btn-warning" title="Logout"><i class="fa fa-fw fa-right-from-bracket"></i></button>
+            </form>
           </li>
         </ul>
 {%! end %}

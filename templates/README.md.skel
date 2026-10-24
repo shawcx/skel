@@ -23,10 +23,12 @@ Every page needs a login. Add a user, or change their password, with:
 
     python3 -m {{ py_name }} --add-user <user>
 
-Users are kept in `{{ py_path }}/data/{{ lower_name }}.users`, set `users` in the `[auth]`
-section of the ini file to keep them elsewhere. Sessions are kept in memory, so a restart
-logs everyone out. `on_login_success()` in `{{ py_path }}/{{ lower_name }}.py` decides
-what goes in a session.
+`--remove-user <user>` removes a user and ends their sessions, and `--list-users` lists them.
+Users are kept in `{{ py_path }}/data/{{ lower_name }}.users`, and sessions, with the secret
+that signs their cookies, in `{{ py_path }}/data/{{ lower_name }}.sessions`, so logins survive
+a restart. Set `users` and `sessions` in the `[auth]` section of the ini file to keep them
+elsewhere, for example when the package is installed. `on_login_success()` in
+`{{ py_path }}/{{ lower_name }}.py` decides what goes in a session.
 {% end %}
 {% if 'nginx' in features %}
 

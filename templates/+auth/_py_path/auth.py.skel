@@ -6,8 +6,10 @@ import functools
 import getpass
 import hashlib
 import hmac
+import json
 import logging
 import os
+import secrets
 import sys
 import time
 import urllib.parse
@@ -20,18 +22,72 @@ def arguments():
         metavar='<user>',
         help='Add a user or change their password, then exit')
 
+    {{ py_name }}.argparser.add_argument('--remove-user',
+        metavar='<user>',
+        help='Remove a user and end their sessions, then exit')
+
+    {{ py_name }}.argparser.add_argument('--list-users',
+        action='store_true',
+        help='List the users, then exit')
+
 
 def expires():
     '''hours that a login lasts'''
     return {{ py_name }}.config.getfloat('auth', 'expires', fallback=24)
 
 
+def write_private(path, text):
+    '''replace a file in one step, readable only by its owner'''
+    fd = os.open(path + '.tmp', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as fp:
+        fp.write(text)
+    os.replace(path + '.tmp', path)
+
+
 class Sessions:
-    '''sessions are kept in memory, so a restart logs everyone out'''
+    '''sessions and the secret that signs their cookies are saved to the
+       sessions file, so logins survive a restart; with sessions left empty in
+       the [auth] section they are only kept in memory'''
 
     def __init__(self):
         self.expires  = expires() * 3600
         self.sessions = {}
+        self.secret   = None
+
+        path = {{ py_name }}.config.get('auth', 'sessions', fallback='{{ lower_name }}.sessions')
+        # relative paths are in the data directory
+        self.path = {{ py_name }}.data(os.path.expanduser(path)) if path else None
+        if not self.path:
+            return
+
+        try:
+            with open(self.path, 'r') as fp:
+                saved = json.load(fp)
+            self.secret = saved['secret']
+            for session_id,entry in saved['sessions'].items():
+                self.sessions[session_id] = (entry['created'], entry['session'])
+        except FileNotFoundError:
+            pass
+        except (OSError,ValueError,KeyError,TypeError,AttributeError) as e:
+            raise {{ py_name }}.error('Could not read sessions: %s', e) from None
+
+    def save(self):
+        if not self.path:
+            return
+        sessions = {session_id:dict(created=created, session=session)
+            for session_id,(created,session) in self.sessions.items()}
+        try:
+            write_private(self.path, {{ py_name }}.json_encode(dict(secret=self.secret, sessions=sessions)))
+        except OSError as e:
+            # logins still work, they just won't survive a restart
+            logging.warning('Could not save sessions: %s', e)
+
+    def cookie_secret(self):
+        '''the saved secret, or None to use a new one for each start'''
+        if self.path and not self.secret:
+            self.secret = secrets.token_hex(32)
+            self.save()
+        return self.secret
 
     def save_session(self, session):
         now = time.time()
@@ -40,16 +96,18 @@ class Sessions:
             if now - created > self.expires:
                 del self.sessions[session_id]
         self.sessions[session['session_id']] = (now, session)
+        self.save()
 
     def load_session(self, session_id):
         created,session = self.sessions.get(session_id, (0, None))
         if time.time() - created > self.expires:
-            self.sessions.pop(session_id, None)
+            self.clear_session(session_id)
             return None
         return session
 
     def clear_session(self, session_id):
-        self.sessions.pop(session_id, None)
+        if self.sessions.pop(session_id, None):
+            self.save()
 
 
 async def session(handler):
@@ -57,11 +115,15 @@ async def session(handler):
     session_id = handler.get_signed_cookie('session_id', max_age_days=expires() / 24)
     if not session_id:
         return None
-    return await {{ py_name }}.wait({{ py_name }}.sessions.load_session(session_id.decode('utf-8')))
+    session = await {{ py_name }}.wait({{ py_name }}.sessions.load_session(session_id.decode('utf-8')))
+    # a removed user's sessions end, even while the app is running
+    if session and session.get('username') not in read_users():
+        return None
+    return session
 
 
-# users are kept in a file of user:hash lines, which is read for every login
-# and is fine for a limited number of users
+# users are kept in a file of user:hash lines, which is fine for a limited
+# number of users; it's read again whenever it changes
 
 def users_path():
     path = {{ py_name }}.config.get('auth', 'users', fallback='{{ lower_name }}.users')
@@ -69,10 +131,17 @@ def users_path():
     return {{ py_name }}.data(os.path.expanduser(path))
 
 
+_users = (None, {})
+
 def read_users():
-    users = {}
+    global _users
+    path = users_path()
     try:
-        with open(users_path(), 'r') as fp:
+        changed = (path, os.stat(path).st_mtime_ns)
+        if changed == _users[0]:
+            return _users[1]
+        users = {}
+        with open(path, 'r') as fp:
             for line in fp:
                 line = line.strip()
                 if not line or line.startswith('#'):
@@ -80,48 +149,56 @@ def read_users():
                 username,stored = line.split(':', 1)
                 users[username] = stored
     except FileNotFoundError:
-        pass
+        return {}
     except (OSError,ValueError) as e:
         raise {{ py_name }}.error('Could not read users: %s', e) from None
+    _users = (changed, users)
     return users
 
 
 def write_users(users):
-    path = users_path()
     try:
-        # only the owner can read the hashes, and replace the file in one step
-        fd = os.open(path + '.tmp', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'w') as fp:
-            for username,stored in users.items():
-                fp.write(f'{username}:{stored}\n')
-        os.replace(path + '.tmp', path)
+        write_private(users_path(), ''.join(f'{username}:{stored}\n' for username,stored in users.items()))
     except OSError as e:
         raise {{ py_name }}.error('Could not write users: %s', e) from None
 
 
-def add_user():
-    '''add the --add-user user or change their password, returns True if it was given'''
-    username = {{ py_name }}.args.add_user
-    if not username:
-        return False
-    if ':' in username:
-        raise {{ py_name }}.error('User names cannot contain ":"')
+def manage_users():
+    '''handle --add-user, --remove-user and --list-users, returns True if one was given'''
+    args = {{ py_name }}.args
+    users = dict(read_users())
 
-    # prompt on a terminal, otherwise read a line from stdin for scripts
-    if sys.stdin.isatty():
-        password = getpass.getpass(f'Password for {username}: ')
-        if password != getpass.getpass('Again: '):
-            raise {{ py_name }}.error('Passwords do not match')
+    if args.add_user:
+        username = args.add_user
+        if ':' in username:
+            raise {{ py_name }}.error('User names cannot contain ":"')
+
+        # prompt on a terminal, otherwise read a line from stdin for scripts
+        if sys.stdin.isatty():
+            password = getpass.getpass(f'Password for {username}: ')
+            if password != getpass.getpass('Again: '):
+                raise {{ py_name }}.error('Passwords do not match')
+        else:
+            password = sys.stdin.readline().rstrip('\r\n')
+        if not password:
+            raise {{ py_name }}.error('No password given')
+
+        users[username] = hash_password(password)
+        write_users(users)
+        logging.info('Saved user %s to %s', username, users_path())
+
+    elif args.remove_user:
+        if users.pop(args.remove_user, None) is None:
+            raise {{ py_name }}.error('No user: %s', args.remove_user)
+        write_users(users)
+        logging.info('Removed user %s from %s', args.remove_user, users_path())
+
+    elif args.list_users:
+        for username in users:
+            print(username)
+
     else:
-        password = sys.stdin.readline().rstrip('\r\n')
-    if not password:
-        raise {{ py_name }}.error('No password given')
-
-    users = read_users()
-    users[username] = hash_password(password)
-    write_users(users)
-
-    logging.info('Saved user %s to %s', username, users_path())
+        return False
     return True
 
 
