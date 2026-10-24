@@ -21,6 +21,12 @@ port    = 8080
 # empty to keep sessions in memory
 #sessions = {{ lower_name }}.sessions
 {% end %}
+{% if 'sqlite' in features %}
+
+[sqlite]
+# the database file, relative to the data directory
+#path = {{ lower_name }}.db
+{% end %}
 {% if 'nginx' in features %}
 
 # settings for --nginx, any {name} in nginx.conf can be set here

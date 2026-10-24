@@ -11,6 +11,10 @@ requires-python = ">=3.10"
 dynamic         = ["version"]
 dependencies    = [
     "tornado>=6.4",
+{% if 'sqlite' in features %}
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+{% end %}
 ]
 {% if __license__ %}
 license         = {{ json.dumps(__license__) }}
@@ -51,5 +55,9 @@ include = ["{{ namespace or lower_name }}*"]
 {% if 'auth' in features %}
     "data/{{ lower_name }}.users",
     "data/{{ lower_name }}.sessions",
+{% end %}
+{% if 'sqlite' in features %}
+    "data/{{ lower_name }}.db",
+    "data/{{ lower_name }}.db-journal",
 {% end %}
 ]

@@ -31,6 +31,21 @@ a restart. Set `users` and `sessions` in the `[auth]` section of the ini file to
 elsewhere, for example when the package is installed. `on_login_success()` in
 `{{ py_path }}/{{ lower_name }}.py` decides what goes in a session.
 {% end %}
+{% if 'sqlite' in features %}
+
+## Database
+
+The app opens `{{ py_path }}/data/{{ lower_name }}.db` at startup, or the `path` in the
+`[sqlite]` section of the ini file, and creates the tables of the models in
+`{{ py_path }}/models.py` that don't exist yet. Existing tables aren't changed, so a changed
+model needs its table altered or dropped by hand. Handlers use the database with:
+
+    async with db.session() as session:
+        messages = await session.scalars(sqlalchemy.select(Message))
+
+`/api/messages` is an example: GET lists the messages as JSON, and POST adds one from a body
+like `{"text": "hi"}`.
+{% end %}
 {% if 'nginx' in features %}
 
 ## nginx

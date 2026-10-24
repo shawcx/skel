@@ -1,5 +1,8 @@
 .PHONY: all run test test-frontend
 
+# the test venv if there is one, see README.md
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
 NAME ?= Slog
 NS   ?= skunk
 WITH ?=
@@ -10,7 +13,7 @@ run:
 	./skel.py --force $(if $(NS),--namespace $(NS)) $(if $(WITH),--with $(WITH)) $(NAME)
 
 test:
-	python3 test/smoke.py
+	$(PYTHON) test/smoke.py
 
 test-frontend:
-	python3 test/frontend.py
+	$(PYTHON) test/frontend.py

@@ -139,6 +139,39 @@ def test_websocket(app):
     app.start()
     assert asyncio.run(relay(app)) == {'action':'test'}
 {% end %}
+{% if 'sqlite' in features %}
+
+
+def test_messages(app):
+{% if 'auth' in features %}
+    add_user(app, 'alice')
+{% end %}
+    app.start()
+
+    async def check():
+{% if 'auth' in features %}
+        browser = Browser(app)
+        rsp = await browser.get('/api/messages')
+        assert rsp.code == 403, rsp
+        await browser.get('/login')
+        await browser.post('/login', username='alice', password='secret')
+        fetch = browser.fetch
+{% else %}
+        client = tornado.httpclient.AsyncHTTPClient()
+        def fetch(path, **kwds):
+            return client.fetch(app.url(path), raise_error=False, **kwds)
+{% end %}
+
+        rsp = await fetch('/api/messages', method='POST', body=json.dumps({'text':'hi'}))
+        assert rsp.code == 201 and json.loads(rsp.body)['text'] == 'hi', rsp
+        rsp = await fetch('/api/messages', method='POST', body='{}')
+        assert rsp.code == 400, rsp
+
+        rsp = await fetch('/api/messages')
+        assert [m['text'] for m in json.loads(rsp.body)['data']] == ['hi'], rsp.body
+
+    asyncio.run(check())
+{% end %}
 {% if 'nginx' in features %}
 
 

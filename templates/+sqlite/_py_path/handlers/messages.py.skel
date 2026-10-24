@@ -1,0 +1,41 @@
+
+import json
+
+import sqlalchemy
+
+import {{ py_name }}
+
+from .base import Handler
+from .. import db
+from ..models import Message
+
+
+class Messages(Handler):
+    '''GET lists the messages, POST adds one from a JSON body like {"text": "hi"}'''
+{% if 'auth' in features %}
+
+    async def prepare(self):
+        self.current_user = await {{ py_name }}.auth.session(self)
+        if not self.current_user:
+            raise {{ py_name }}.HTTPError(403)
+{% end %}
+
+    async def get(self):
+        async with db.session() as session:
+            messages = await session.scalars(sqlalchemy.select(Message).order_by(Message.id))
+            self.write({'data':messages.all()})
+
+    async def post(self):
+        try:
+            text = json.loads(self.request.body)['text']
+            if not isinstance(text, str):
+                raise TypeError(text)
+        except (ValueError,KeyError,TypeError):
+            raise {{ py_name }}.HTTPError(400, 'expected {"text": "..."}') from None
+
+        async with db.session() as session, session.begin():
+            message = Message(text=text)
+            session.add(message)
+
+        self.set_status(201)
+        self.write(message._as_dict())

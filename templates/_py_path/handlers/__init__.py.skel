@@ -8,3 +8,6 @@ from .login      import Login,Logout
 from .templates  import Template
 from .websockets import WebSocket
 {% end %}
+{% if 'sqlite' in features %}
+from .messages   import Messages
+{% end %}

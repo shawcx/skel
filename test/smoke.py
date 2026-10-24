@@ -218,6 +218,7 @@ def check(tmp, namespace, features, prefix):
             (os.path.join(project, 'src', 'package-lock.json'), False),
             *([(os.path.join(package, 'data', 'smoke.users'), True),
                (os.path.join(package, 'data', 'smoke.sessions'), True)] if 'auth' in features else []),
+            *([(os.path.join(package, 'data', 'smoke.db'), True)] if 'sqlite' in features else []),
             ]:
         rc = subprocess.run(['git', '-C', project, 'check-ignore', '-q', path]).returncode
         assert (rc == 0) == ignored, f'{path} should {"" if ignored else "not "}be ignored'
@@ -350,21 +351,32 @@ def check(tmp, namespace, features, prefix):
         expected += ['systemd.py', 'data/systemd.service']
     if 'nginx' in features:
         expected += ['nginx.py', 'data/nginx.conf']
+    if 'sqlite' in features:
+        expected += ['db.py', 'models.py', 'handlers/messages.py']
     if 'auth' in features:
         expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
     for name in expected:
         assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
-    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users', 'data/smoke.sessions'):
+    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users', 'data/smoke.sessions', 'data/smoke.db'):
         assert f'{prefix}/{name}' not in names, f'{prefix}/{name} is in the wheel'
 
 
 def main():
+    # the generated tests need pytest, and the sqlite feature its packages
+    for module in ('pytest', 'sqlalchemy', 'aiosqlite'):
+        try:
+            __import__(module)
+        except ImportError:
+            print(f'{module} is needed, install the test packages with:\n'
+                '  python3 -m pip install tornado "setuptools>=77" pytest "sqlalchemy[asyncio]" aiosqlite',
+                file=sys.stderr)
+            return 1
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
         for namespace,features,prefix in [
                 ('skunk', [], ''),
                 ('', [], ''),
-                ('skunk', ['auth', 'github', 'gitlab', 'nginx', 'systemd'], '/app'),
+                ('skunk', ['auth', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd'], '/app'),
                 ]:
             print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
             check(tmp, namespace, features, prefix)

@@ -1,0 +1,45 @@
+
+import os
+
+import sqlalchemy.exc
+import sqlalchemy.ext.asyncio
+import sqlalchemy.orm
+
+import {{ py_name }}
+
+
+class Base(sqlalchemy.orm.DeclarativeBase):
+    '''models derive from this, and connect() creates their tables'''
+
+
+engine  = None
+session = None
+
+
+def path():
+    path = {{ py_name }}.config.get('sqlite', 'path', fallback='{{ lower_name }}.db')
+    # relative paths are in the data directory
+    return {{ py_name }}.data(os.path.expanduser(path))
+
+
+async def connect():
+    '''open the database and create the tables that don't exist yet'''
+    global engine, session
+
+    # the models have to be imported for create_all to know their tables
+    from . import models
+
+    engine = sqlalchemy.ext.asyncio.create_async_engine(f'sqlite+aiosqlite:///{path()}')
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except sqlalchemy.exc.SQLAlchemyError as e:
+        raise {{ py_name }}.error('Could not open the database %s: %s', path(), e) from None
+
+    # use as: async with db.session() as session
+    session = sqlalchemy.ext.asyncio.async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def close():
+    if engine is not None:
+        await engine.dispose()

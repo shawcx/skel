@@ -12,8 +12,12 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend.
     make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
-project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`, and
-`make test` also needs `pytest`.
+project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.
+
+`make test` also needs `pytest`, and SQLAlchemy and aiosqlite for the `sqlite` feature. It
+uses `.venv` if there is one, which can be made with:
+
+    uv venv && uv pip install tornado "setuptools>=77" pip pytest "sqlalchemy[asyncio]" aiosqlite
 
 The generated project has its own README. Run `make` in it to build the web assets,
 which needs `npm`, then `make run`.
@@ -64,4 +68,5 @@ check the sorted `features` list instead:
 | `github`  | a GitHub Actions workflow that runs the tests and builds the web assets       |
 | `gitlab`  | a GitLab CI pipeline that runs the tests and builds the web assets            |
 | `nginx`   | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
+| `sqlite`  | a SQLite database through async SQLAlchemy, with an example model and API     |
 | `systemd` | `--systemd [<user>]`, which writes a systemd service for the app              |

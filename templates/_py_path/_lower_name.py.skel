@@ -24,6 +24,9 @@ from . import auth
 {% if 'nginx' in features %}
 from . import nginx
 {% end %}
+{% if 'sqlite' in features %}
+from . import db
+{% end %}
 {% if 'systemd' in features %}
 from . import systemd
 {% end %}
@@ -104,6 +107,10 @@ class {{ proper_name }}(tornado.web.Application):
         {{ py_name }}.sessions = auth.Sessions()
 
 {% end %}
+{% if 'sqlite' in features %}
+        await db.connect()
+
+{% end %}
         self.settings['static_path']   = {{ py_name }}.data('static')
         self.settings['template_path'] = {{ py_name }}.data('templates')
         self.settings['debug']         = {{ py_name }}.args.debug
@@ -152,6 +159,9 @@ class {{ proper_name }}(tornado.web.Application):
         await self._stop_event.wait()
         # call clean-up code
         await {{ py_name }}.wait(self.on_stop())
+{% if 'sqlite' in features %}
+        await db.close()
+{% end %}
 
     async def initialize(self):
         '''application entry point, add patterns and settings here'''
@@ -159,9 +169,15 @@ class {{ proper_name }}(tornado.web.Application):
 {% if 'auth' in features %}
             ( r'/',   handlers.Protected       ),
             ( r'/ws', handlers.ProtectedSocket ),
+{% if 'sqlite' in features %}
+            ( r'/api/messages', handlers.Messages ),
+{% end %}
 {% else %}
             ( r'/',   handlers.Template  ),
             ( r'/ws', handlers.WebSocket ),
+{% if 'sqlite' in features %}
+            ( r'/api/messages', handlers.Messages ),
+{% end %}
 {% end %}
             ])
 

@@ -1,0 +1,24 @@
+
+import datetime
+
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .db import Base
+
+
+def now():
+    # SQLite keeps no time zone, so times are stored as UTC
+    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+
+class Message(Base):
+    '''an example table, served at /api/messages'''
+    __tablename__ = 'messages'
+
+    id      : Mapped[int] = mapped_column(primary_key=True)
+    text    : Mapped[str]
+    created : Mapped[datetime.datetime] = mapped_column(default=now)
+
+    def _as_dict(self):
+        # {{ py_name }}.JSONEncoder writes objects with _as_dict()
+        return dict(id=self.id, text=self.text, created=self.created.replace(tzinfo=datetime.timezone.utc))

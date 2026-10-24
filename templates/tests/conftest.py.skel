@@ -36,6 +36,11 @@ prefix  =
 users    = {tmp_path / 'users'}
 sessions = {tmp_path / 'sessions'}
 {% end %}
+{% if 'sqlite' in features %}
+
+[sqlite]
+path = {tmp_path / 'test.db'}
+{% end %}
 {% if 'nginx' in features %}
 
 [nginx]
