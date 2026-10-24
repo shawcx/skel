@@ -16,7 +16,7 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend, or w
     make test-docker                # build and run a web app and a service with docker compose
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
-project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.
+project is only overwritten with `--force`. Requires Python 3.11+ and `tornado`.
 
 `make test` also needs `pytest`, and SQLAlchemy and aiosqlite for the `sqlite` feature. It
 uses `.venv` if there is one, which can be made with:

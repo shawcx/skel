@@ -5,7 +5,7 @@ test:
   image: python:$PYTHON
   parallel:
     matrix:
-      - PYTHON: ["3.10", "3.15"]
+      - PYTHON: ["3.11", "3.15"]
   script:
     - pip install -q '.[test]'
     - python -m pytest

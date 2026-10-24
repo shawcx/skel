@@ -8,7 +8,7 @@ from .db import Base
 
 def now():
     # SQLite keeps no time zone, so times are stored as UTC
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
 
 class Message(Base):
@@ -21,4 +21,4 @@ class Message(Base):
 
     def _as_dict(self):
         # {{ py_name }}.JSONEncoder writes objects with _as_dict()
-        return dict(id=self.id, text=self.text, created=self.created.replace(tzinfo=datetime.timezone.utc))
+        return dict(id=self.id, text=self.text, created=self.created.replace(tzinfo=datetime.UTC))

@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name            = "{{ lower_name }}"
 description     = "{{ proper_name }}"
 readme          = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dynamic         = ["version"]
 dependencies    = [
 {% if 'web' in features %}

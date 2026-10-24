@@ -229,7 +229,7 @@ class {{ proper_name }}:
     async def sleep(self, _timeout):
         try:
             await asyncio.wait_for(self._stop_event.wait(), timeout=_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return True
         return False
 
@@ -247,7 +247,7 @@ class {{ proper_name }}:
                 try:
                     await asyncio.wait_for(self._stop_event.wait(), timeout=_timeout)
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 try:
                     await {{ py_name }}.wait(fn(*args, **kwds))
