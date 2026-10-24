@@ -1,23 +1,41 @@
+# the project's venv when there is one, make venv creates it
+ifeq ($(OS),Windows_NT)
+VENV_PYTHON   = .venv/Scripts/python.exe
+SYSTEM_PYTHON = python
+else
+VENV_PYTHON   = .venv/bin/python
+SYSTEM_PYTHON = python3
+endif
+PYTHON ?= $(if $(wildcard $(VENV_PYTHON)),$(VENV_PYTHON),$(SYSTEM_PYTHON))
+
 all:
 {% if 'frontend' in features %}
 	@$(MAKE) -C src
 {% end %}
 
+# options for the app, like make run ARGS="--port 9000 --debug"
 run:
-	PYTHONPATH=. python3 -m {{ py_name }}
+	$(PYTHON) -m {{ py_name }} $(ARGS)
 
 test:
-	python3 -m pytest
+	$(PYTHON) -m pytest
+
+# uv makes the venv when it's installed, otherwise python's venv module
+UV = $(shell uv --version)
+
+venv:
+	$(if $(UV),uv venv .venv,$(SYSTEM_PYTHON) -m venv .venv)
+	$(if $(UV),uv pip install --python $(VENV_PYTHON),$(VENV_PYTHON) -m pip install) -e ".[test]"
 
 install: all
-	pip3 install --upgrade .
+	$(PYTHON) -m pip install --upgrade .
 
 dist: all
-	python3 -m build
+	$(PYTHON) -m build
 
 clean:
-	@find . -type d -name __pycache__ -exec rm -rf {} +
-	@rm -rf .pytest_cache
+	@$(PYTHON) -c "import pathlib, shutil; [shutil.rmtree(p) for p in pathlib.Path('.').rglob('__pycache__') if '.venv' not in p.parts]"
+	@$(PYTHON) -c "import shutil; shutil.rmtree('.pytest_cache', ignore_errors=True)"
 
 distclean: clean
-	@rm -rf build/ dist/ *.egg-info/
+	@$(PYTHON) -c "import glob, shutil; [shutil.rmtree(p, ignore_errors=True) for p in ['build', 'dist', *glob.glob('*.egg-info')]]"

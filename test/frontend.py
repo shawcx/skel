@@ -8,6 +8,7 @@ to the browser's path if it isn't found
 import asyncio
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -142,6 +143,17 @@ def main():
         static = os.path.join(package, 'data', 'static')
         for path in ('js/front.js', 'js/front.js.map', 'css/front.css', 'webfonts/fa-solid-900.woff2'):
             assert os.path.isfile(os.path.join(static, path)), f'{path} was not built'
+
+        # the project's own Makefile targets, also on Windows
+        step('make')
+        run('make', '-C', project, 'venv')
+        out = subprocess.run(['make', '-C', project, 'run', 'ARGS=--version'],
+            capture_output=True, text=True)
+        assert out.returncode == 0 and '0.1.0' in out.stdout, out
+        run('make', '-C', project, 'test')
+        run('make', '-C', project, 'clean')
+        leftover = [p for p in pathlib.Path(project).rglob('__pycache__') if '.venv' not in p.parts]
+        assert not leftover, leftover
 
         step('browser')
         port = free_port()
