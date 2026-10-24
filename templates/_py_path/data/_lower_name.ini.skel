@@ -33,7 +33,8 @@ port    = 8080
 {% end %}
 {% if 'nginx' in features %}
 
-# settings for --nginx, any {name} in nginx.conf can be set here
+# settings for --nginx, any {name} in nginx.conf can be set here; a path of -
+# prints the site, and with static_path empty the app serves the static files
 [nginx]
 #server_name = {{ lower_name }}.example.com
 #path = /etc/nginx/sites-available/{server_name}

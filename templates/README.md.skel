@@ -58,6 +58,13 @@ It keeps its files in
 {% end %}
 the `data` volume. `docker/{{ lower_name }}.ini` has the settings for the container, and
 `/data/.{{ lower_name }}.ini` in the volume can change them.
+{% if 'nginx' in features %}
+
+For nginx on this host, the container prints the site, which sends everything to the app,
+static files too. Add `--port` if `PORT` isn't 8080:
+
+    docker compose run --rm -T {{ lower_name }} --nginx <server_name> | sudo tee /etc/nginx/sites-available/<server_name>
+{% end %}
 {% end %}
 {% if 'sqlite' in features %}
 

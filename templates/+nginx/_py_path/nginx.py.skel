@@ -1,5 +1,6 @@
 
 import logging
+import sys
 
 import {{ py_name }}
 
@@ -46,10 +47,21 @@ def install():
         conf = fp.read()
 
     try:
+        # with static_path empty, as it is when the app runs in a container,
+        # nginx passes the static files on to the app too
+        params['static'] = ''
+        if params['static_path']:
+            with open({{ py_name }}.data('nginx-static.conf'), 'r') as fp:
+                params['static'] = '\n' + fp.read().format(**params)
         conf = conf.format(**params)
         path = params['path'].format(**params)
     except KeyError as e:
         raise {{ py_name }}.error('Missing nginx parameter: %s', e) from None
+
+    # a path of - prints the site, for example from a container
+    if path == '-':
+        sys.stdout.write(conf)
+        return True
 
     try:
         with open(path, 'w') as fp:

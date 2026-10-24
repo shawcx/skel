@@ -11,6 +11,15 @@ port    = 8080
 users    = /data/{{ lower_name }}.users
 sessions = /data/{{ lower_name }}.sessions
 {% end %}
+{% if 'nginx' in features %}
+
+[nginx]
+# --nginx runs in the container, so it prints the site, which sends everything,
+# static files too, to the port that compose publishes on this host
+path        = -
+address     = 127.0.0.1
+static_path =
+{% end %}
 {% if 'sqlite' in features %}
 
 [sqlite]

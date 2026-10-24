@@ -300,6 +300,15 @@ def check(tmp, namespace, features, prefix):
         rc = subprocess.run([sys.executable, '-m', module, '--ini', ini, '--nginx'],
             env=env, capture_output=True).returncode
         assert rc == 1, f'--nginx without a server name exited with {rc}'
+
+        # a path of - prints the site, and with static_path empty, as in a container,
+        # nginx sends the static files to the app too
+        with open(ini, 'w') as fp:
+            fp.write('[nginx]\npath = -\nstatic_path =\n')
+        out = subprocess.run([sys.executable, '-m', module, '--ini', ini, '--nginx', 'smoke.example.com'],
+            env=env, capture_output=True, text=True)
+        assert out.returncode == 0 and 'server_name smoke.example.com;' in out.stdout, out
+        assert 'alias' not in out.stdout and f'location {prefix}/ {{' in out.stdout, out.stdout
     else:
         assert not os.path.exists(os.path.join(package, 'nginx.py'))
         rc = subprocess.run([sys.executable, '-m', module, '--nginx', 'x'],
@@ -351,7 +360,7 @@ def check(tmp, namespace, features, prefix):
     if 'systemd' in features:
         expected += ['systemd.py', 'data/systemd.service']
     if 'nginx' in features:
-        expected += ['nginx.py', 'data/nginx.conf']
+        expected += ['nginx.py', 'data/nginx.conf', 'data/nginx-static.conf']
     if 'sqlite' in features:
         expected += ['db.py', 'models.py'] + (['handlers/messages.py'] if 'web' in features else [])
     if 'auth' in features:
