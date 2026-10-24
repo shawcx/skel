@@ -1,0 +1,159 @@
+
+import asyncio
+import datetime
+import json
+{% if 'auth' in features %}
+import http.cookies
+import urllib.parse
+{% else %}
+import urllib.request
+{% end %}
+
+import pytest
+import tornado.httpclient
+import tornado.websocket
+
+import {{ py_name }}
+from {{ py_name }} import version
+
+
+def test_version(app):
+    out = app.run('--version')
+    assert out.returncode == 0 and version.__version__ in out.stdout, out
+
+
+def test_bad_ini(app):
+    app.ini.write_text('not an ini file\n')
+    out = app.run()
+    assert out.returncode == 1 and 'Unable to parse' in out.stderr, out
+
+
+def test_json_encode():
+    data = {'when': datetime.date(2026, 1, 2), 'raw': b'hi'}
+    assert {{ py_name }}.json_encode(data) == '{"when": "2026-01-02", "raw": "aGk="}'
+
+
+async def relay(app, headers={}):
+    '''send a message on one WebSocket and return what another one receives'''
+    def connect():
+        request = tornado.httpclient.HTTPRequest(app.url('/ws', 'ws'), headers=headers)
+        return tornado.websocket.websocket_connect(request)
+    a = await connect()
+    b = await connect()
+    await a.write_message(json.dumps({'action':'test'}))
+    return json.loads(await asyncio.wait_for(b.read_message(), 5))
+{% if 'auth' in features %}
+
+
+class Browser:
+    '''an HTTP client that keeps cookies, sends the xsrf token with forms
+       and doesn't follow redirects'''
+
+    def __init__(self, app):
+        self.app = app
+        self.cookies = {}
+
+    async def fetch(self, path, **kwds):
+        headers = {'Cookie':'; '.join(f'{k}={v}' for k,v in self.cookies.items())}
+        rsp = await tornado.httpclient.AsyncHTTPClient().fetch(self.app.url(path),
+            headers=headers, follow_redirects=False, raise_error=False, **kwds)
+        for header in rsp.headers.get_list('Set-Cookie'):
+            for name,morsel in http.cookies.SimpleCookie(header).items():
+                if morsel.value:
+                    self.cookies[name] = morsel.value
+                else:
+                    self.cookies.pop(name, None)
+        return rsp
+
+    async def get(self, path):
+        return await self.fetch(path)
+
+    async def post(self, path, **form):
+        form['_xsrf'] = self.cookies.get('_xsrf', '')
+        return await self.fetch(path, method='POST', body=urllib.parse.urlencode(form))
+
+
+def add_user(app, username, password='secret'):
+    out = app.run('--add-user', username, input=password + '\n')
+    assert out.returncode == 0, out
+
+
+def test_login_required(app):
+    app.start()
+
+    async def check():
+        rsp = await Browser(app).get('/')
+        assert rsp.code == 302 and rsp.headers['Location'] == '/login?next=%2F', rsp
+        with pytest.raises(tornado.httpclient.HTTPClientError) as e:
+            await relay(app)
+        assert e.value.code == 403
+
+    asyncio.run(check())
+
+
+def test_login(app):
+    add_user(app, 'alice')
+    app.start()
+
+    async def check():
+        browser = Browser(app)
+        # the login page sets the xsrf cookie that the form sends back
+        await browser.get('/login')
+
+        rsp = await browser.post('/login', username='alice', password='wrong')
+        assert rsp.code == 403, rsp
+        rsp = await browser.post('/login', username='alice', password='secret')
+        assert rsp.code == 302, rsp
+
+        rsp = await browser.get('/')
+        assert rsp.code == 200 and b'alice' in rsp.body, rsp
+        cookie = {'Cookie':f'session_id={browser.cookies["session_id"]}'}
+        assert await relay(app, cookie) == {'action':'test'}
+
+        rsp = await browser.post('/logout')
+        assert rsp.code == 302, rsp
+        rsp = await browser.get('/')
+        assert rsp.code == 302, rsp
+
+    asyncio.run(check())
+
+
+def test_users(app):
+    add_user(app, 'alice')
+    add_user(app, 'bob')
+    assert app.run('--list-users').stdout.split() == ['alice', 'bob']
+
+    assert app.run('--remove-user', 'bob').returncode == 0
+    assert app.run('--list-users').stdout.split() == ['alice']
+    assert app.run('--remove-user', 'bob').returncode == 1
+{% else %}
+
+
+def test_page(app):
+    app.start()
+    with urllib.request.urlopen(app.url('/')) as rsp:
+        assert '<title>{{ proper_name }}</title>' in rsp.read().decode()
+
+
+def test_websocket(app):
+    app.start()
+    assert asyncio.run(relay(app)) == {'action':'test'}
+{% end %}
+{% if 'nginx' in features %}
+
+
+def test_nginx(app):
+    out = app.run('--nginx', '{{ lower_name }}.example.com')
+    assert out.returncode == 0, out
+    site = (app.tmp / 'nginx.conf').read_text()
+    assert 'server_name {{ lower_name }}.example.com;' in site, site
+{% end %}
+{% if 'systemd' in features %}
+
+
+def test_systemd(app):
+    out = app.run('--systemd', 'nobody')
+    assert out.returncode == 0, out
+    service = (app.tmp / '{{ lower_name }}.service').read_text()
+    assert 'User=nobody' in service and '-m {{ py_name }}' in service, service
+{% end %}

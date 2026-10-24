@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install tornado "setuptools>=77"
+      - run: python -m pip install tornado "setuptools>=77" pytest
       - run: python test/smoke.py
 
   frontend:

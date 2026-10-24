@@ -1,0 +1,86 @@
+
+import os
+import socket
+import subprocess
+import sys
+import time
+import urllib.request
+
+import pytest
+
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
+
+
+class App:
+    '''runs {{ proper_name }} with a test ini file, which keeps its files in a temp directory'''
+
+    def __init__(self, tmp_path):
+        self.tmp  = tmp_path
+        self.ini  = tmp_path / 'test.ini'
+        self.proc = None
+        # the --ini file is read last, so it wins over local settings
+        self.ini.write_text(f"""
+[{{ lower_name }}]
+address = 127.0.0.1
+prefix  =
+{% if 'auth' in features %}
+
+[auth]
+users    = {tmp_path / 'users'}
+sessions = {tmp_path / 'sessions'}
+{% end %}
+{% if 'nginx' in features %}
+
+[nginx]
+path = {tmp_path / 'nginx.conf'}
+{% end %}
+{% if 'systemd' in features %}
+
+[systemd]
+path = {tmp_path / '{{ lower_name }}.service'}
+{% end %}
+""")
+
+    def command(self, *args):
+        return [sys.executable, '-m', '{{ py_name }}', '--ini', str(self.ini), *args]
+
+    def run(self, *args, input=None):
+        '''run {{ proper_name }} with options such as --version, returns the completed process'''
+        return subprocess.run(self.command(*args), cwd=self.tmp, env=dict(os.environ, PYTHONPATH=ROOT),
+            input=input, capture_output=True, text=True)
+
+    def start(self):
+        '''start the server on a free port and wait until it answers'''
+        self.port = free_port()
+        self.proc = subprocess.Popen(self.command('--port', str(self.port)), cwd=self.tmp,
+            env=dict(os.environ, PYTHONPATH=ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(self.url('/static/favicon.ico')).close()
+                return
+            except OSError:
+                time.sleep(0.1)
+        raise AssertionError('{{ proper_name }} did not start')
+
+    def stop(self):
+        if self.proc:
+            self.proc.terminate()
+            self.proc.wait(10)
+            self.proc = None
+
+    def url(self, path, scheme='http'):
+        return f'{scheme}://127.0.0.1:{self.port}{path}'
+
+
+@pytest.fixture
+def app(tmp_path):
+    app = App(tmp_path)
+    yield app
+    app.stop()

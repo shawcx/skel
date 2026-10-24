@@ -326,6 +326,11 @@ def check(tmp, namespace, features, prefix):
             mode = os.stat(os.path.join(package, 'data', name)).st_mode & 0o777
             assert mode == 0o600, f'{name} is {oct(mode)}'
 
+    step('pytest')
+    run(sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', cwd=project)
+    for name,feature in [('.github/workflows/test.yml', 'github'), ('.gitlab-ci.yml', 'gitlab')]:
+        assert os.path.isfile(os.path.join(project, name)) == (feature in features), name
+
     step('wheel')
     # files made at run time must stay out of the wheel
     for name in ('smoke.ini.local', 'smoke.log'):
@@ -359,7 +364,7 @@ def main():
         for namespace,features,prefix in [
                 ('skunk', [], ''),
                 ('', [], ''),
-                ('skunk', ['auth', 'nginx', 'systemd'], '/app'),
+                ('skunk', ['auth', 'github', 'gitlab', 'nginx', 'systemd'], '/app'),
                 ]:
             print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
             check(tmp, namespace, features, prefix)

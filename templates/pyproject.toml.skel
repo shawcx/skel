@@ -18,6 +18,9 @@ license         = {{ json.dumps(__license__) }}
 {% if __author__ %}
 authors         = [{ name = {{ json.dumps(__author__) }}{% if __email__ %}, email = {{ json.dumps(__email__) }}{% end %} }]
 {% end %}
+
+[project.optional-dependencies]
+test = ["pytest"]
 {% if __url__ %}
 
 [project.urls]
@@ -26,6 +29,10 @@ Homepage = {{ json.dumps(__url__) }}
 
 [project.scripts]
 {{ lower_name }} = "{{ py_name }}.{{ lower_name }}:{{ proper_name }}.main"
+
+[tool.pytest.ini_options]
+testpaths  = ["tests"]
+pythonpath = ["."]
 
 [tool.setuptools.dynamic]
 version = { attr = "{{ py_name }}.version.__version__" }

@@ -4,6 +4,9 @@ all:
 run:
 	PYTHONPATH=. python3 -m {{ py_name }}
 
+test:
+	python3 -m pytest
+
 install: all
 	pip3 install --upgrade .
 
@@ -12,6 +15,7 @@ dist: all
 
 clean:
 	@find . -type d -name __pycache__ -exec rm -rf {} +
+	@rm -rf .pytest_cache
 
 distclean: clean
 	@rm -rf build/ dist/ *.egg-info/

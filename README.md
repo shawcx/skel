@@ -12,7 +12,8 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend.
     make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
-project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.
+project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`, and
+`make test` also needs `pytest`.
 
 The generated project has its own README. Run `make` in it to build the web assets,
 which needs `npm`, then `make run`.
@@ -60,5 +61,7 @@ check the sorted `features` list instead:
 | Feature   | Adds                                                                          |
 |-----------|-------------------------------------------------------------------------------|
 | `auth`    | logins for every page and the WebSocket, with users added by `--add-user`     |
+| `github`  | a GitHub Actions workflow that runs the tests and builds the web assets       |
+| `gitlab`  | a GitLab CI pipeline that runs the tests and builds the web assets            |
 | `nginx`   | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
 | `systemd` | `--systemd [<user>]`, which writes a systemd service for the app              |

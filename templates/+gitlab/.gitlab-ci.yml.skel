@@ -1,0 +1,16 @@
+# the tests on the oldest Python that pyproject.toml supports and the newest,
+# and the web assets build
+
+test:
+  image: python:$PYTHON
+  parallel:
+    matrix:
+      - PYTHON: ["3.10", "3.15"]
+  script:
+    - pip install -q '.[test]'
+    - python -m pytest
+
+frontend:
+  image: node:24
+  script:
+    - make -C src
