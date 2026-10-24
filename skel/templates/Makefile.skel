@@ -25,7 +25,7 @@ UV = $(shell uv --version)
 
 venv:
 	$(if $(UV),uv venv .venv,$(SYSTEM_PYTHON) -m venv .venv)
-	$(if $(UV),uv pip install --python $(VENV_PYTHON),$(VENV_PYTHON) -m pip install) -e ".[test]"
+	$(if $(UV),uv pip install --python $(VENV_PYTHON),$(VENV_PYTHON) -m pip install) -e ".[dev]"
 
 install: all
 	$(PYTHON) -m pip install --upgrade .

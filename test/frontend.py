@@ -151,6 +151,9 @@ def main():
             capture_output=True, text=True)
         assert out.returncode == 0 and '0.1.0' in out.stdout, out
         run('make', '-C', project, 'test')
+        run('make', '-C', project, 'dist')
+        built = sorted(os.listdir(os.path.join(project, 'dist')))
+        assert built == ['front-0.1.0-py3-none-any.whl', 'front-0.1.0.tar.gz'], built
         run('make', '-C', project, 'clean')
         leftover = [p for p in pathlib.Path(project).rglob('__pycache__') if '.venv' not in p.parts]
         assert not leftover, leftover

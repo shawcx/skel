@@ -27,6 +27,7 @@ authors         = [{ name = {{ json.dumps(__author__) }}{% if __email__ %}, emai
 
 [project.optional-dependencies]
 test = ["pytest"]
+dev  = ["build", "pytest"]
 {% if __url__ %}
 
 [project.urls]
