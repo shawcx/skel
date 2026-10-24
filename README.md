@@ -9,6 +9,7 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend.
     make run NAME=Slog NS=skunk     # same as ./skel.py --force --namespace skunk Slog
     make run WITH=systemd           # also passes --with systemd
     make test                       # generate projects into a temp directory and check they work
+    make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
 project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.

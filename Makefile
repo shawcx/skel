@@ -1,4 +1,4 @@
-.PHONY: all run test
+.PHONY: all run test test-frontend
 
 NAME ?= Slog
 NS   ?= skunk
@@ -11,3 +11,6 @@ run:
 
 test:
 	python3 test/smoke.py
+
+test-frontend:
+	python3 test/frontend.py
