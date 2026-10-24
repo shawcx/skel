@@ -8,11 +8,9 @@ import argparse
 import subprocess
 
 from .jsxn import jsxn
+from .version import __version__
 
 import tornado.template
-
-
-__version__ = '0.1.0'
 
 # resolve everything relative to this package, not the current directory
 ROOT      = os.path.dirname(os.path.abspath(__file__))

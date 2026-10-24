@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "skel"
-version         = "0.1.0"
+dynamic         = ["version"]
 description     = "Generate Tornado web apps and asyncio services"
 readme          = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,9 @@ skel = "skel:main"
 
 [tool.setuptools]
 packages = ["skel"]
+
+[tool.setuptools.dynamic]
+version = { attr = "skel.version.__version__" }
 
 [tool.setuptools.package-data]
 # glob skips names that start with a dot, so they need their own patterns
