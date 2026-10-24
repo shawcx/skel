@@ -32,10 +32,11 @@ class Login(Handler):
         self.redirect(self.next_url())
 
     def next_url(self):
-        url = self.get_argument('next', '/')
+        home = self.settings['prefix'] + '/'
+        url = self.get_argument('next', home)
         # only go to paths on this site, //host and /\host are other sites
         if not url.startswith('/') or url.startswith(('//', '/\\')):
-            url = '/'
+            url = home
         return url
 
 
@@ -48,4 +49,4 @@ class Logout(Handler):
             await {{ py_name }}.wait({{ py_name }}.sessions.clear_session(session_id))
 
         self.clear_cookie('session_id')
-        self.redirect('/')
+        self.redirect(self.settings['prefix'] + '/')

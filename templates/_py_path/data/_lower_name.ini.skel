@@ -18,6 +18,13 @@ port    = 8080
 # user:hash lines written by --add-user, relative to the data directory
 #users = {{ lower_name }}.users
 {% end %}
+{% if 'nginx' in features %}
+
+# settings for --nginx, any {name} in nginx.conf can be set here
+[nginx]
+#server_name = {{ lower_name }}.example.com
+#path = /etc/nginx/sites-available/{server_name}
+{% end %}
 {% if 'systemd' in features %}
 
 # settings for --systemd, any {name} in systemd.service can be set here

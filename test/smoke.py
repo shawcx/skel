@@ -47,8 +47,8 @@ async def refused(url, headers):
         raise AssertionError(f'WebSocket was accepted with {headers}')
 
 
-async def check_websockets(port, headers={}):
-    url = f'ws://127.0.0.1:{port}/ws'
+async def check_websockets(port, prefix, headers={}):
+    url = f'ws://127.0.0.1:{port}{prefix}/ws'
     a = await tornado.websocket.websocket_connect(tornado.httpclient.HTTPRequest(url, headers=headers))
     b = await tornado.websocket.websocket_connect(tornado.httpclient.HTTPRequest(url, headers=headers))
 
@@ -69,7 +69,7 @@ def cookies(rsp):
     return {name:morsel.value for name,morsel in jar.items()}
 
 
-async def check_auth(port):
+async def check_auth(port, prefix):
     client = tornado.httpclient.AsyncHTTPClient()
 
     async def fetch(path, jar=None, **form):
@@ -78,12 +78,15 @@ async def check_auth(port):
             kwds['headers'] = {'Cookie':'; '.join(f'{k}={v}' for k,v in jar.items())}
         if form:
             kwds.update(method='POST', body=urllib.parse.urlencode(form))
-        return await client.fetch(f'http://127.0.0.1:{port}{path}', **kwds)
+        return await client.fetch(f'http://127.0.0.1:{port}{prefix}{path}', **kwds)
+
+    home = prefix + '/'
 
     # pages and the WebSocket need a login
     rsp = await fetch('/')
-    assert rsp.code == 302 and rsp.headers['Location'] == '/login?next=%2F', rsp
-    await refused(f'ws://127.0.0.1:{port}/ws', {})
+    login = f'{prefix}/login?' + urllib.parse.urlencode(dict(next=home))
+    assert rsp.code == 302 and rsp.headers['Location'] == login, rsp
+    await refused(f'ws://127.0.0.1:{port}{prefix}/ws', {})
 
     # the login page sets the xsrf cookie, the form must send it back
     rsp = await fetch('/login?next=/')
@@ -97,17 +100,17 @@ async def check_auth(port):
 
     # next can't send people to another site
     rsp = await fetch('/login', jar, _xsrf=jar['_xsrf'], username='alice', password='secret', next='//example.com')
-    assert rsp.code == 302 and rsp.headers['Location'] == '/', rsp
+    assert rsp.code == 302 and rsp.headers['Location'] == home, rsp
     jar.update(cookies(rsp))
     assert 'session_id' in jar, jar
 
     rsp = await fetch('/', jar)
     assert rsp.code == 200 and b'alice' in rsp.body, rsp
-    await check_websockets(port, {'Cookie':f'session_id={jar["session_id"]}'})
+    await check_websockets(port, prefix, {'Cookie':f'session_id={jar["session_id"]}'})
 
     # logging out ends the session, not just the cookie
     rsp = await fetch('/logout', jar)
-    assert rsp.code == 302, rsp
+    assert rsp.code == 302 and rsp.headers['Location'] == home, rsp
     rsp = await fetch('/', jar)
     assert rsp.code == 302, rsp
 
@@ -121,7 +124,7 @@ def check_options(tmp):
     assert not os.path.exists(project), project
 
 
-def check(tmp, namespace, features):
+def check(tmp, namespace, features, prefix):
     project = os.path.join(tmp, '-'.join([namespace or 'none', *features]), 'smoke')
     module  = f'{namespace}.smoke' if namespace else 'smoke'
     package = os.path.join(project, *module.split('.'))
@@ -134,6 +137,9 @@ def check(tmp, namespace, features):
     step('generate')
     run(sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke')
     assert os.path.isfile(os.path.join(package, 'smoke.py')), package
+    if prefix:
+        with open(os.path.join(package, 'data', 'smoke.ini.local'), 'w') as fp:
+            fp.write(f'[smoke]\nprefix = {prefix}\n')
 
     step('gitignore')
     run('git', 'init', '-q', project)
@@ -194,6 +200,33 @@ def check(tmp, namespace, features):
             env=env, capture_output=True).returncode
         assert rc == 2, f'--systemd without the feature exited with {rc}'
 
+    step('nginx')
+    if 'nginx' in features:
+        # write the site into the project instead of /etc
+        ini = os.path.join(project, 'nginx.ini')
+        site = os.path.join(project, 'nginx.site')
+        with open(ini, 'w') as fp:
+            fp.write(f'[nginx]\npath = {site}\n')
+        run(sys.executable, '-m', module, '--ini', ini, '--nginx', 'smoke.example.com', '--port', '9999',
+            env=env, cwd=project)
+        with open(site) as fp:
+            conf = fp.read()
+        static = os.path.join(package, 'data', 'static')
+        for line in ('server 127.0.0.1:9999;', 'server_name smoke.example.com;',
+                f'location ^~ {prefix}/static/ {{', f'alias {static}/;',
+                f'location {prefix}/ws {{', f'location {prefix}/ {{'):
+            assert line in conf, f'{line!r} not in nginx site:\n{conf}'
+
+        # without a server name it fails
+        rc = subprocess.run([sys.executable, '-m', module, '--ini', ini, '--nginx'],
+            env=env, capture_output=True).returncode
+        assert rc == 1, f'--nginx without a server name exited with {rc}'
+    else:
+        assert not os.path.exists(os.path.join(package, 'nginx.py'))
+        rc = subprocess.run([sys.executable, '-m', module, '--nginx', 'x'],
+            env=env, capture_output=True).returncode
+        assert rc == 2, f'--nginx without the feature exited with {rc}'
+
     step('auth')
     if 'auth' in features:
         run(sys.executable, '-m', module, '--add-user', 'alice', env=env, input='secret\n', text=True)
@@ -212,7 +245,7 @@ def check(tmp, namespace, features):
     try:
         for _ in range(50):
             try:
-                with urllib.request.urlopen(f'http://127.0.0.1:{port}/') as rsp:
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}{prefix}/') as rsp:
                     body = rsp.read().decode()
                 break
             except OSError:
@@ -220,11 +253,14 @@ def check(tmp, namespace, features):
         else:
             raise AssertionError('server did not respond')
         assert '<title>Smoke</title>' in body, body
+        # links and static files use the prefix
+        assert f'data-prefix="{prefix}"' in body and f'href="{prefix}/static/' in body, body
 
-        with urllib.request.urlopen(f'http://127.0.0.1:{port}/favicon.ico') as rsp:
-            assert rsp.status == 200
+        for path in [f'{prefix}/static/favicon.ico'] + ([] if prefix else ['/favicon.ico']):
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}{path}') as rsp:
+                assert rsp.status == 200, path
 
-        asyncio.run(check_auth(port) if 'auth' in features else check_websockets(port))
+        asyncio.run(check_auth(port, prefix) if 'auth' in features else check_websockets(port, prefix))
     finally:
         server.terminate()
         server.wait(5)
@@ -246,6 +282,8 @@ def check(tmp, namespace, features):
     expected = ['smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html']
     if 'systemd' in features:
         expected += ['systemd.py', 'data/systemd.service']
+    if 'nginx' in features:
+        expected += ['nginx.py', 'data/nginx.conf']
     if 'auth' in features:
         expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
     for name in expected:
@@ -257,9 +295,13 @@ def check(tmp, namespace, features):
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
-        for namespace,features in [('skunk', []), ('', []), ('skunk', ['auth', 'systemd'])]:
-            print(f'== namespace {namespace!r} features {features}', flush=True)
-            check(tmp, namespace, features)
+        for namespace,features,prefix in [
+                ('skunk', [], ''),
+                ('', [], ''),
+                ('skunk', ['auth', 'nginx', 'systemd'], '/app'),
+                ]:
+            print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
+            check(tmp, namespace, features, prefix)
 
     print('ok')
     return 0

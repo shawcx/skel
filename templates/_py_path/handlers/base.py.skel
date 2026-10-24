@@ -7,6 +7,12 @@ import {{ py_name }}
 class Handler(tornado.web.RequestHandler):
     '''writes dicts and lists as JSON with {{ py_name }}.JSONEncoder, so bytes,
        UUIDs and datetimes can be written directly'''
+    def get_template_namespace(self):
+        # templates add the prefix to their links
+        namespace = super().get_template_namespace()
+        namespace['prefix'] = self.settings.get('prefix', '')
+        return namespace
+
     def write(self, chunk):
         if isinstance(chunk, (dict, list)):
             self.set_header('Content-Type', 'application/json; charset=UTF-8')

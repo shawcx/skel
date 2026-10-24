@@ -20,7 +20,9 @@ class Socket {
         }
 
         let protocol = location.protocol.replace('http','ws')
-        this.wsurl = `${protocol}//${location.host}/${this.options.path}`
+        // routes can have a prefix, base.template puts it on the body
+        let prefix = document.body.dataset.prefix || ''
+        this.wsurl = `${protocol}//${location.host}${prefix}/${this.options.path}`
 
         this.timeout = this.options.timeout
         this.connect()

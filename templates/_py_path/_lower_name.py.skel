@@ -21,6 +21,9 @@ from . import handlers
 {% if 'auth' in features %}
 from . import auth
 {% end %}
+{% if 'nginx' in features %}
+from . import nginx
+{% end %}
 {% if 'systemd' in features %}
 from . import systemd
 {% end %}
@@ -62,6 +65,10 @@ class {{ proper_name }}(tornado.web.Application):
 
         auth.arguments()
 {% end %}
+{% if 'nginx' in features %}
+
+        nginx.arguments()
+{% end %}
 {% if 'systemd' in features %}
 
         systemd.arguments()
@@ -70,6 +77,12 @@ class {{ proper_name }}(tornado.web.Application):
         # errors go up to main, which logs them and exits with 1
         await {{ py_name }}.settings.load()
         await self.logging()
+{% if 'nginx' in features %}
+
+        # install the site instead of running
+        if nginx.install():
+            return
+{% end %}
 {% if 'systemd' in features %}
 
         # install the service instead of running
@@ -114,10 +127,11 @@ class {{ proper_name }}(tornado.web.Application):
 {% end %}
 
         # prepend prefix specified in the ini file, useful for nginx reverse proxy
-        prefix = {{ py_name }}.config.get('{{ lower_name }}', 'prefix', fallback='')
+        prefix = {{ py_name }}.settings.prefix()
+        # templates and redirects add it to their links
+        self.settings['prefix'] = prefix
+        self.settings.setdefault('static_url_prefix', f'{prefix}/static/')
         if prefix:
-            if not prefix[0] == '/':
-                prefix = '/' + prefix
             patterns = [(f'{prefix}{r[0]}',) + tuple(r[1:]) for r in patterns]
         else:
             patterns.append(

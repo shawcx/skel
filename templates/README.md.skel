@@ -28,6 +28,22 @@ section of the ini file to keep them elsewhere. Sessions are kept in memory, so 
 logs everyone out. `on_login_success()` in `{{ py_path }}/{{ lower_name }}.py` decides
 what goes in a session.
 {% end %}
+{% if 'nginx' in features %}
+
+## nginx
+
+Install an nginx site that serves `/static/` itself and proxies the rest, including the
+WebSocket, to the app:
+
+    sudo python3 -m {{ py_name }} --nginx <server_name>
+    sudo ln -s /etc/nginx/sites-available/<server_name> /etc/nginx/sites-enabled/
+    sudo nginx -t && sudo systemctl reload nginx
+
+It redirects HTTP to HTTPS and expects a certificate in `/etc/letsencrypt/live/<server_name>/`,
+for example from `certbot certonly`. The `prefix` setting puts the app under a path, so other
+sites can share the server. Settings in the `[nginx]` section of the ini file fill in
+`{{ py_path }}/data/nginx.conf`.
+{% end %}
 {% if 'systemd' in features %}
 
 ## systemd

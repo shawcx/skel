@@ -1,0 +1,62 @@
+
+import logging
+
+import {{ py_name }}
+
+
+def arguments():
+    {{ py_name }}.argparser.add_argument('--nginx',
+        metavar='<server_name>', default=0, nargs='?',
+        help='Install an nginx site that proxies <server_name> to the app, then exit')
+
+
+def install():
+    '''write the site file if --nginx was given, returns True if it was'''
+    # --nginx without a server name is None, leaving it out is 0
+    if {{ py_name }}.args.nginx == 0:
+        return False
+
+    config = {{ py_name }}.config
+    params = dict(
+        name        = '{{ lower_name }}',
+        server_name = None,
+        # the address and port the app listens on
+        address     = {{ py_name }}.args.address or config.get('{{ lower_name }}', 'address', fallback='127.0.0.1'),
+        port        = {{ py_name }}.args.port or config.getint('{{ lower_name }}', 'port', fallback=8080),
+        prefix      = {{ py_name }}.settings.prefix(),
+        static_path = {{ py_name }}.data('static'),
+        web_root    = '/var/www/html',
+        listen_ip4  = '0.0.0.0',
+        listen_ip6  = '[::]',
+        listen_http = 80,
+        listen_ssl  = 443,
+        path        = '/etc/nginx/sites-available/{server_name}',
+        )
+
+    # any of the params can be set in the [nginx] section of the ini file
+    if config.has_section('nginx'):
+        params.update(config['nginx'])
+
+    if {{ py_name }}.args.nginx:
+        params['server_name'] = {{ py_name }}.args.nginx
+    if not params['server_name']:
+        raise {{ py_name }}.error('No server name, use --nginx <server_name> or set server_name in [nginx]')
+
+    with open({{ py_name }}.data('nginx.conf'), 'r') as fp:
+        conf = fp.read()
+
+    try:
+        conf = conf.format(**params)
+        path = params['path'].format(**params)
+    except KeyError as e:
+        raise {{ py_name }}.error('Missing nginx parameter: %s', e) from None
+
+    try:
+        with open(path, 'w') as fp:
+            fp.write(conf)
+    except OSError as e:
+        raise {{ py_name }}.error('Could not write nginx site: %s', e) from None
+
+    logging.info('Installed nginx site: %s', path)
+    logging.info('Enable it with: ln -s %s /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx', path)
+    return True
