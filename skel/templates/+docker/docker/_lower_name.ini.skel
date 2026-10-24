@@ -20,6 +20,12 @@ path        = -
 address     = 127.0.0.1
 static_path =
 {% end %}
+{% if 'postgres' in features %}
+
+[postgres]
+url           = postgresql://{{ lower_name }}@db/{{ lower_name }}
+password_file = /run/secrets/db_password
+{% end %}
 {% if 'sqlite' in features %}
 
 [sqlite]

@@ -161,7 +161,7 @@ def test_runs(app):
     if os.name == 'posix':
         assert code == 0
 {% end %}
-{% if 'sqlite' in features and 'web' in features %}
+{% if 'db' in features and 'web' in features %}
 
 
 def test_messages(app):
@@ -190,7 +190,7 @@ def test_messages(app):
         assert rsp.code == 400, rsp
 
         rsp = await fetch('/api/messages')
-        assert [m['text'] for m in json.loads(rsp.body)['data']] == ['hi'], rsp.body
+        assert 'hi' in [m['text'] for m in json.loads(rsp.body)['data']], rsp.body
 
     asyncio.run(check())
 {% end %}

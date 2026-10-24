@@ -50,5 +50,5 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.15'
-      - run: python -m pip install tornado
+      - run: python -m pip install tornado pytest "sqlalchemy[asyncio]" asyncpg
       - run: python test/docker.py

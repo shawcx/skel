@@ -20,6 +20,9 @@ __pycache__/
 /{{ py_path }}/data/{{ lower_name }}.users
 /{{ py_path }}/data/{{ lower_name }}.sessions
 {% end %}
+{% if 'postgres' in features and 'docker' in features %}
+/secrets/
+{% end %}
 {% if 'sqlite' in features %}
 /{{ py_path }}/data/{{ lower_name }}.db
 /{{ py_path }}/data/{{ lower_name }}.db-journal

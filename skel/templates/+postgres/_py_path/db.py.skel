@@ -1,0 +1,61 @@
+
+import os
+
+import sqlalchemy.engine
+import sqlalchemy.exc
+import sqlalchemy.ext.asyncio
+import sqlalchemy.orm
+
+import {{ py_name }}
+
+
+class Base(sqlalchemy.orm.DeclarativeBase):
+    '''models derive from this, and connect() creates their tables'''
+
+
+engine  = None
+session = None
+
+
+def url():
+    '''the database URL from the [postgres] section, with the password from password_file'''
+    config = {{ py_name }}.config
+    try:
+        url = sqlalchemy.engine.make_url(config.get('postgres', 'url', fallback='postgresql://localhost/{{ lower_name }}'))
+    except sqlalchemy.exc.ArgumentError as e:
+        raise {{ py_name }}.error('Bad url in [postgres]: %s', e) from None
+    # SQLAlchemy reaches PostgreSQL through asyncpg
+    url = url.set(drivername='postgresql+asyncpg')
+
+    password_file = config.get('postgres', 'password_file', fallback=None)
+    if password_file:
+        try:
+            with open(os.path.expanduser(password_file), 'r') as fp:
+                url = url.set(password=fp.read().strip())
+        except OSError as e:
+            raise {{ py_name }}.error('Could not read the database password: %s', e) from None
+    return url
+
+
+async def connect():
+    '''connect to the database and create the tables that don't exist yet'''
+    global engine, session
+
+    # the models have to be imported for create_all to know their tables
+    from . import models
+
+    engine = sqlalchemy.ext.asyncio.create_async_engine(url(), pool_pre_ping=True)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except (sqlalchemy.exc.SQLAlchemyError,OSError) as e:
+        where = url().render_as_string(hide_password=True)
+        raise {{ py_name }}.error('Could not open the database %s: %s', where, e) from None
+
+    # use as: async with db.session() as session
+    session = sqlalchemy.ext.asyncio.async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def close():
+    if engine is not None:
+        await engine.dispose()

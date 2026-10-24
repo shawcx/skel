@@ -31,6 +31,14 @@ port    = 8080
 # the database file, relative to the data directory
 #path = {{ lower_name }}.db
 {% end %}
+{% if 'postgres' in features %}
+
+[postgres]
+# the database, postgresql://localhost/{{ lower_name }} when it isn't set
+#url = postgresql://{{ lower_name }}@localhost/{{ lower_name }}
+# a file that holds only the password, so it isn't in an ini file
+#password_file = ~/.{{ lower_name }}.password
+{% end %}
 {% if 'nginx' in features %}
 
 # settings for --nginx, any {name} in nginx.conf can be set here; a path of -

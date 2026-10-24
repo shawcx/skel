@@ -202,6 +202,75 @@ def check_service(tmp):
         stack.down()
 
 
+def check_postgres_tests(tmp):
+    '''a project's own tests, with a PostgreSQL server for the ones that need it'''
+    step('postgres tests')
+    project = generate(tmp, '--with', 'auth,postgres', 'Pgtest')
+    port = free_port()
+    name = f'skel-test-postgres-{os.getpid()}'
+    run('docker', 'run', '--detach', '--rm', '--name', name, '--publish', f'127.0.0.1:{port}:5432',
+        '--env', 'POSTGRES_USER=test', '--env', 'POSTGRES_PASSWORD=test', '--env', 'POSTGRES_DB=test',
+        'postgres:18.6-alpine', stdout=subprocess.DEVNULL)
+    try:
+        # the server restarts once after it creates the database, so wait for the TCP port too
+        for _ in range(60):
+            ready = subprocess.run(['docker', 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'test'],
+                capture_output=True).returncode == 0
+            if ready:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError('PostgreSQL did not start')
+        out = subprocess.run([sys.executable, '-m', 'pytest', '-q', '-rs', '-p', 'no:cacheprovider'], cwd=project,
+            env=dict(os.environ, TEST_POSTGRES_URL=f'postgresql://test:test@127.0.0.1:{port}/test'),
+            capture_output=True, text=True)
+        assert out.returncode == 0 and 'skipped' not in out.stdout, out.stdout[-3000:]
+    finally:
+        subprocess.run(['docker', 'stop', name], capture_output=True)
+
+
+async def keep_message(port, text):
+    client = tornado.httpclient.AsyncHTTPClient()
+    rsp = await client.fetch(f'http://127.0.0.1:{port}/api/messages', method='POST',
+        body=json.dumps({'text':text}), raise_error=False)
+    assert rsp.code == 201, rsp
+
+
+async def messages(port):
+    rsp = await tornado.httpclient.AsyncHTTPClient().fetch(f'http://127.0.0.1:{port}/api/messages')
+    return [m['text'] for m in json.loads(rsp.body)['data']]
+
+
+def check_postgres_stack(tmp):
+    project = generate(tmp, '--with', 'docker,postgres', 'Pgweb')
+    os.makedirs(os.path.join(project, 'secrets'))
+    with open(os.path.join(project, 'secrets', 'db_password.txt'), 'w') as fp:
+        fp.write('not-a-real-password\n')
+
+    port = free_port()
+    stack = Stack(project, 'pgweb', PORT=str(port))
+    try:
+        step('build postgres')
+        stack.check('up', '--detach', '--build')
+        stack.healthy()
+        asyncio.run(keep_message(port, 'in postgres'))
+
+        # only the app reaches the database
+        db = stack.check('ps', '-aq', 'db').strip()
+        bindings = subprocess.run(['docker', 'inspect', '-f', '{{json .HostConfig.PortBindings}}', db],
+            capture_output=True, text=True).stdout.strip()
+        assert bindings in ('{}', 'null'), f'the database is published: {bindings}'
+
+        step('restart postgres')
+        stack.check('restart')
+        stack.healthy()
+        assert asyncio.run(messages(port)) == ['in postgres']
+        code = stack.stop()
+        assert code == '0', code
+    finally:
+        stack.down()
+
+
 def main():
     out = subprocess.run(['docker', 'compose', 'version'], capture_output=True, text=True)
     assert out.returncode == 0, f'docker compose is needed:\n{out.stderr}'
@@ -209,6 +278,8 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         check_web(tmp)
         check_service(tmp)
+        check_postgres_tests(tmp)
+        check_postgres_stack(tmp)
 
     print('ok')
     return 0

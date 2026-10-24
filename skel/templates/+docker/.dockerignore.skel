@@ -14,6 +14,9 @@ src/node_modules/
 {% end %}
 
 # local settings, logs, users and data stay out of the image
+{% if 'postgres' in features %}
+secrets/
+{% end %}
 {{ py_path }}/data/{{ lower_name }}.ini.local
 {{ py_path }}/data/{{ lower_name }}.log
 {% if 'auth' in features %}

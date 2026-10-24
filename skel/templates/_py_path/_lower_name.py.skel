@@ -32,7 +32,7 @@ from . import auth
 {% if 'nginx' in features %}
 from . import nginx
 {% end %}
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
 from . import db
 {% end %}
 {% if 'systemd' in features %}
@@ -121,7 +121,7 @@ class {{ proper_name }}:
         {{ py_name }}.sessions = auth.Sessions()
 
 {% end %}
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
         await db.connect()
 
 {% end %}
@@ -180,7 +180,7 @@ class {{ proper_name }}:
         await self._stop_event.wait()
         # call clean-up code
         await {{ py_name }}.wait(self.on_stop())
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
         await db.close()
 {% end %}
 
@@ -195,7 +195,7 @@ class {{ proper_name }}:
             ( r'/',   handlers.Template  ),
             ( r'/ws', handlers.WebSocket ),
 {% end %}
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
             ( r'/api/messages', handlers.Messages ),
 {% end %}
             ])

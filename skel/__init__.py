@@ -30,6 +30,18 @@ REQUIRES = {
     'nginx'    : ['web'],
     }
 
+# features that bring others with them, which can't be chosen on their own
+IMPLIES = {
+    'postgres' : ['db'],
+    'sqlite'   : ['db'],
+    }
+IMPLIED = sorted(set(f for implied in IMPLIES.values() for f in implied))
+
+# features that can't be used together
+EXCLUSIVE = [
+    {'postgres', 'sqlite'},
+    ]
+
 # a {% %} tag alone on a line, but not an escaped {%! %}
 TAG_LINE = re.compile(r'^[ \t]*(\{%(?!!)(?:(?!%\}).)*%\})[ \t]*\r?\n', re.M)
 
@@ -58,7 +70,7 @@ argparser.add_argument('--output', '-o',
 
 argparser.add_argument('--with',
     metavar='<feature>', dest='features', action='append', default=[],
-    help=f'add optional features, comma separated or repeated: {", ".join(f for f in FEATURES if f not in DEFAULTS)}')
+    help=f'add optional features, comma separated or repeated: {", ".join(f for f in FEATURES if f not in DEFAULTS + IMPLIED)}')
 
 argparser.add_argument('--without',
     metavar='<feature>', action='append', default=[],
@@ -156,8 +168,12 @@ class Skel:
         self.chosen  = chosen  = split(self.args.features)
         self.without = without = split(self.args.without)
         for feature in sorted(chosen | without):
-            if feature not in FEATURES:
-                argparser.error(f'unknown feature: {feature}, choose from {", ".join(FEATURES)}')
+            if feature not in FEATURES or feature in IMPLIED:
+                choices = ", ".join(f for f in FEATURES if f not in IMPLIED)
+                argparser.error(f'unknown feature: {feature}, choose from {choices}')
+        for group in EXCLUSIVE:
+            if len(group & chosen) > 1:
+                argparser.error(f'choose one of {", ".join(sorted(group))}')
         for feature in sorted(without):
             if feature not in DEFAULTS:
                 argparser.error(f'{feature} is not on by default, --without works for {", ".join(DEFAULTS)}')
@@ -165,6 +181,8 @@ class Skel:
                 argparser.error(f'{feature} is in both --with and --without')
 
         features = set(DEFAULTS) - without | chosen
+        for feature in chosen:
+            features.update(IMPLIES.get(feature, []))
         # a default feature that needs a feature left out goes too, so
         # --without web also leaves out frontend
         for feature in DEFAULTS:
@@ -271,7 +289,7 @@ class Skel:
             print('Nothing changed to commit')
             return
         git('commit', '-q', '-m', f'Generate {self.project.proper_name} with skel\n\n'
-            f'Features: {", ".join(self.features) or "none"}')
+            f'Features: {", ".join(f for f in self.features if f not in IMPLIED) or "none"}')
         print('Committed to a git repository')
 
     def record(self):

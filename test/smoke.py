@@ -191,6 +191,8 @@ def check_options(tmp):
             (['--without', 'auth'], 'auth is not on by default'),
             (['--with', 'web', '--without', 'web'], 'web is in both --with and --without'),
             (['--without', 'web', '--with', 'auth'], 'auth needs web'),
+            (['--with', 'postgres,sqlite'], 'choose one of postgres, sqlite'),
+            (['--with', 'db'], 'unknown feature: db'),
             ]:
         out = subprocess.run([sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke'],
             capture_output=True, text=True)
@@ -311,7 +313,7 @@ def check_update(tmp):
     # the Makefile's, one the project didn't touch, a new file and a removed one
     edit(os.path.join(templates, 'README.md.skel'), '# {{ proper_name }}', '# {{ proper_name }} app')
     edit(os.path.join(templates, 'Makefile.skel'), '-m pytest', '-m pytest -q')
-    edit(os.path.join(templates, '+sqlite', '_py_path', 'models.py.skel'), 'an example table', 'an example table v2')
+    edit(os.path.join(templates, '+db', '_py_path', 'models.py.skel'), 'an example table', 'an example table v2')
     with open(os.path.join(templates, 'NOTES.md.skel'), 'w') as fp:
         fp.write('Notes for {{ proper_name }}\n')
     os.remove(os.path.join(templates, '+frontend', 'src', 'js', 'socket.js'))
@@ -487,7 +489,10 @@ def check(tmp, namespace, features, prefix):
             ('Dockerfile', 'docker'), ('compose.yaml', 'docker'), ('docker/smoke.ini', 'docker')]:
         assert os.path.isfile(os.path.join(project, name)) == (feature in features), name
 
-    if 'web' in features:
+    if 'postgres' in features:
+        # without a database the app doesn't start, test/docker.py runs one
+        step('serve: needs PostgreSQL')
+    elif 'web' in features:
         check_serve(features, prefix, module, env, project, package)
     else:
         check_run(module, env, project)
@@ -516,7 +521,7 @@ def check(tmp, namespace, features, prefix):
         expected += ['systemd.py', 'data/systemd.service']
     if 'nginx' in features:
         expected += ['nginx.py', 'data/nginx.conf', 'data/nginx-static.conf']
-    if 'sqlite' in features:
+    if 'sqlite' in features or 'postgres' in features:
         expected += ['db.py', 'models.py'] + (['handlers/messages.py'] if 'web' in features else [])
     if 'auth' in features:
         expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
@@ -593,6 +598,7 @@ def main():
                 # without a frontend, and without web at all
                 ('', ['auth', 'web'], ''),
                 ('skunk', ['docker', 'github', 'sqlite', 'systemd'], ''),
+                ('', ['docker', 'postgres', 'web'], ''),
                 ]:
             print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
             check(tmp, namespace, features, prefix)

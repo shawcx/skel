@@ -27,7 +27,9 @@ repository and commits it, with its features in the message. Requires Python 3.1
 `make test` also needs `pytest`, and SQLAlchemy and aiosqlite for the `sqlite` feature. It
 uses `.venv` if there is one, which can be made with:
 
-    uv venv && uv pip install tornado "setuptools>=77" pip pytest "sqlalchemy[asyncio]" aiosqlite
+    uv venv && uv pip install tornado "setuptools>=77" pip pytest "sqlalchemy[asyncio]" aiosqlite asyncpg
+
+`make test-docker` also runs PostgreSQL in a container, for the `postgres` feature.
 
 The generated project has its own README. Run `make` in it to build the web assets,
 which needs `npm`, then `make run`.
@@ -101,7 +103,9 @@ another feature by wrapping all of it in an `{% if %}`.
 
 `DEFAULTS` and `REQUIRES` in `skel/__init__.py` list the default features and the features that
 need others. Leaving out a feature also leaves out the default features that need it,
-so `--without web` also leaves out `frontend`.
+so `--without web` also leaves out `frontend`. `IMPLIES` lists features that bring others
+with them, such as `sqlite` and `postgres`, which both bring `db` with the models and API
+they share, and `EXCLUSIVE` the ones that can't be used together.
 
 | Feature    | Adds                                                                          |
 |------------|-------------------------------------------------------------------------------|
@@ -112,5 +116,6 @@ so `--without web` also leaves out `frontend`.
 | `github`   | a GitHub Actions workflow that runs the tests and builds the web assets       |
 | `gitlab`   | a GitLab CI pipeline that runs the tests and builds the web assets            |
 | `nginx`    | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
+| `postgres` | PostgreSQL through async SQLAlchemy, with a `db` service when using docker    |
 | `sqlite`   | a SQLite database through async SQLAlchemy, with an example model and API     |
 | `systemd`  | `--systemd [<user>]`, which writes a systemd service for the app              |

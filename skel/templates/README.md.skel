@@ -47,6 +47,9 @@ elsewhere, for example when the package is installed. `on_login_success()` in
 
 Build the image and start the app in the background:
 
+{% if 'postgres' in features %}
+    mkdir -p secrets && openssl rand -hex 24 > secrets/db_password.txt
+{% end %}
     docker compose up -d --build
 {% if 'auth' in features %}
     docker compose run --rm {{ lower_name }} --add-user <user>
@@ -67,20 +70,34 @@ static files too. Add `--port` if `PORT` isn't 8080:
     docker compose run --rm -T {{ lower_name }} --nginx <server_name> | sudo tee /etc/nginx/sites-available/<server_name>
 {% end %}
 {% end %}
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
 
 ## Database
 
+{% if 'sqlite' in features %}
 The app opens `{{ py_path }}/data/{{ lower_name }}.db` at startup, or the `path` in the
-`[sqlite]` section of the ini file, and creates the tables of the models in
-`{{ py_path }}/models.py` that don't exist yet. Existing tables aren't changed, so a changed
-model needs its table altered or dropped by hand. Handlers use the database with:
+`[sqlite]` section of the ini file,
+{% else %}
+The app connects at startup to the PostgreSQL database in the `url` of the `[postgres]`
+section of the ini file, `postgresql://localhost/{{ lower_name }}` if it isn't set,
+{% end %}
+and creates the tables of the models in `{{ py_path }}/models.py` that don't exist yet.
+Existing tables aren't changed, so a changed model needs its table altered or dropped by
+hand. Handlers use the database with:
 
     async with db.session() as session:
         messages = await session.scalars(sqlalchemy.select(Message))
+{% if 'web' in features %}
 
 `/api/messages` is an example: GET lists the messages as JSON, and POST adds one from a body
 like `{"text": "hi"}`.
+{% end %}
+{% if 'postgres' in features %}
+
+Keep the password out of the ini files with `password_file`, a file that holds only the
+password. The tests that need the database run when `TEST_POSTGRES_URL` is set, for example
+`postgresql://user:password@localhost/{{ lower_name }}_test`, and skip otherwise.
+{% end %}
 {% end %}
 {% if 'nginx' in features %}
 

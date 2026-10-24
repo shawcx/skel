@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `--with postgres`: PostgreSQL through async SQLAlchemy and asyncpg, with the password in
+  a `password_file`, and with `docker` a `db` service that the app waits for. Its tests
+  run when `TEST_POSTGRES_URL` is set.
+- `sqlite` and `postgres` share the models and API in a `db` feature that comes with
+  either, and can't be used together.
+
 ## 0.1.0 (2026-10-24)
 
 The first release. skel generates a project built on the ideas of _.py, without needing

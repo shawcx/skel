@@ -13,9 +13,14 @@ dependencies    = [
 {% if 'web' in features %}
     "tornado>=6.4",
 {% end %}
-{% if 'sqlite' in features %}
+{% if 'db' in features %}
     "sqlalchemy[asyncio]>=2.0",
+{% end %}
+{% if 'sqlite' in features %}
     "aiosqlite>=0.20",
+{% end %}
+{% if 'postgres' in features %}
+    "asyncpg>=0.30",
 {% end %}
 ]
 {% if __license__ %}
