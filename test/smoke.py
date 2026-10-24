@@ -7,6 +7,7 @@ the web assets are not built, so this runs offline
 import asyncio
 import http.cookies
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -211,11 +212,12 @@ def check(tmp, namespace, features, prefix):
             env=env, cwd=project)
         with open(site) as fp:
             conf = fp.read()
-        static = os.path.join(package, 'data', 'static')
         for line in ('server 127.0.0.1:9999;', 'server_name smoke.example.com;',
-                f'location ^~ {prefix}/static/ {{', f'alias {static}/;',
-                f'location {prefix}/ws {{', f'location {prefix}/ {{'):
+                f'location ^~ {prefix}/static/ {{', f'location {prefix}/ws {{', f'location {prefix}/ {{'):
             assert line in conf, f'{line!r} not in nginx site:\n{conf}'
+        # the temp directory has another path on macOS, /private/var for /var
+        alias = re.search(r'alias (.*)/;', conf)
+        assert alias and os.path.samefile(alias[1], os.path.join(package, 'data', 'static')), conf
 
         # without a server name it fails
         rc = subprocess.run([sys.executable, '-m', module, '--ini', ini, '--nginx'],

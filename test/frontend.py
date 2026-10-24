@@ -45,13 +45,17 @@ class DevTools:
         self.events = []
 
     @classmethod
-    async def connect(cls, port):
-        for _ in range(100):
+    async def connect(cls, profile):
+        # with --remote-debugging-port=0 Chrome picks a port and writes it here
+        active = os.path.join(profile, 'DevToolsActivePort')
+        for _ in range(300):
             try:
+                with open(active) as fp:
+                    port = int(fp.readline())
                 with urllib.request.urlopen(f'http://127.0.0.1:{port}/json') as rsp:
                     targets = json.load(rsp)
                 break
-            except OSError:
+            except (OSError,ValueError):
                 await asyncio.sleep(0.1)
         else:
             raise AssertionError('Chrome did not start')
@@ -90,8 +94,8 @@ class DevTools:
                 yield f'{params["entry"]["text"]} {params["entry"].get("url", "")}'
 
 
-async def check_page(cdp_port, port):
-    cdp = await DevTools.connect(cdp_port)
+async def check_page(profile, port):
+    cdp = await DevTools.connect(profile)
     for domain in ('Runtime', 'Log', 'Page'):
         await cdp.call(f'{domain}.enable')
     await cdp.call('Page.navigate', url=f'http://127.0.0.1:{port}{PREFIX}/')
@@ -141,22 +145,27 @@ def main():
 
         step('browser')
         port = free_port()
-        cdp_port = free_port()
+        profile = os.path.join(tmp, 'chrome')
         server = subprocess.Popen([sys.executable, '-m', 'front', '--port', str(port)],
             env=env, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        args = [chrome, '--headless=new', f'--remote-debugging-port={cdp_port}',
-            f'--user-data-dir={os.path.join(tmp, "chrome")}', '--no-first-run',
-            '--no-default-browser-check', 'about:blank']
+        args = [chrome, '--headless=new', '--remote-debugging-port=0', f'--user-data-dir={profile}',
+            '--no-first-run', '--no-default-browser-check', 'about:blank']
         # CI runners may not allow Chrome's sandbox, the page is our own
         if os.environ.get('CI'):
             args.insert(1, '--no-sandbox')
-        browser = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log = open(os.path.join(tmp, 'chrome.log'), 'w+')
+        browser = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
         try:
-            asyncio.run(check_page(cdp_port, port))
+            asyncio.run(check_page(profile, port))
+        except:
+            log.seek(0)
+            print(f'{chrome} output:\n{log.read()}', file=sys.stderr)
+            raise
         finally:
             for proc in (browser, server):
                 proc.terminate()
                 proc.wait(10)
+            log.close()
 
     print('ok')
     return 0

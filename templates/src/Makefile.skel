@@ -1,6 +1,8 @@
 
-SASS       = ./node_modules/.bin/sass
-ESBUILD    = ./node_modules/.bin/esbuild
+# npm exec finds the tools in node_modules, on Windows make would otherwise
+# run the .cmd shims with cmd.exe, which can't run ./node_modules/.bin/...
+SASS       = npm exec --no -- sass
+ESBUILD    = npm exec --no -- esbuild
 
 STATIC_ROOT = ../{{ py_path }}/data/static
 
