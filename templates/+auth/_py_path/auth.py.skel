@@ -1,0 +1,240 @@
+
+import asyncio
+import base64
+import binascii
+import functools
+import getpass
+import hashlib
+import hmac
+import logging
+import os
+import sys
+import time
+import urllib.parse
+
+import {{ py_name }}
+
+
+def arguments():
+    {{ py_name }}.argparser.add_argument('--add-user',
+        metavar='<user>',
+        help='Add a user or change their password, then exit')
+
+
+def expires():
+    '''hours that a login lasts'''
+    return {{ py_name }}.config.getfloat('auth', 'expires', fallback=24)
+
+
+class Sessions:
+    '''sessions are kept in memory, so a restart logs everyone out'''
+
+    def __init__(self):
+        self.expires  = expires() * 3600
+        self.sessions = {}
+
+    def save_session(self, session):
+        now = time.time()
+        # drop expired sessions as new ones arrive
+        for session_id,(created,_session) in list(self.sessions.items()):
+            if now - created > self.expires:
+                del self.sessions[session_id]
+        self.sessions[session['session_id']] = (now, session)
+
+    def load_session(self, session_id):
+        created,session = self.sessions.get(session_id, (0, None))
+        if time.time() - created > self.expires:
+            self.sessions.pop(session_id, None)
+            return None
+        return session
+
+    def clear_session(self, session_id):
+        self.sessions.pop(session_id, None)
+
+
+async def session(handler):
+    '''the session for the request's session_id cookie, or None'''
+    session_id = handler.get_signed_cookie('session_id', max_age_days=expires() / 24)
+    if not session_id:
+        return None
+    return await {{ py_name }}.wait({{ py_name }}.sessions.load_session(session_id.decode('utf-8')))
+
+
+# users are kept in a file of user:hash lines, which is read for every login
+# and is fine for a limited number of users
+
+def users_path():
+    path = {{ py_name }}.config.get('auth', 'users', fallback='{{ lower_name }}.users')
+    # relative paths are in the data directory
+    return {{ py_name }}.data(os.path.expanduser(path))
+
+
+def read_users():
+    users = {}
+    try:
+        with open(users_path(), 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                username,stored = line.split(':', 1)
+                users[username] = stored
+    except FileNotFoundError:
+        pass
+    except (OSError,ValueError) as e:
+        raise {{ py_name }}.error('Could not read users: %s', e) from None
+    return users
+
+
+def write_users(users):
+    path = users_path()
+    try:
+        # only the owner can read the hashes, and replace the file in one step
+        fd = os.open(path + '.tmp', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as fp:
+            for username,stored in users.items():
+                fp.write(f'{username}:{stored}\n')
+        os.replace(path + '.tmp', path)
+    except OSError as e:
+        raise {{ py_name }}.error('Could not write users: %s', e) from None
+
+
+def add_user():
+    '''add the --add-user user or change their password, returns True if it was given'''
+    username = {{ py_name }}.args.add_user
+    if not username:
+        return False
+    if ':' in username:
+        raise {{ py_name }}.error('User names cannot contain ":"')
+
+    # prompt on a terminal, otherwise read a line from stdin for scripts
+    if sys.stdin.isatty():
+        password = getpass.getpass(f'Password for {username}: ')
+        if password != getpass.getpass('Again: '):
+            raise {{ py_name }}.error('Passwords do not match')
+    else:
+        password = sys.stdin.readline().rstrip('\r\n')
+    if not password:
+        raise {{ py_name }}.error('No password given')
+
+    users = read_users()
+    users[username] = hash_password(password)
+    write_users(users)
+
+    logging.info('Saved user %s to %s', username, users_path())
+    return True
+
+
+async def check(username, password):
+    '''true if the password is the user's'''
+    stored = read_users().get(username)
+    # hashing is CPU bound so keep it off the event loop
+    if await asyncio.to_thread(verify_password, password, stored):
+        return True
+    logging.warning('Failed login: %s', username)
+    return False
+
+
+# scrypt parameters for new hashes, stored alongside each hash so they can be
+# raised later without invalidating existing passwords
+SCRYPT_N = 2 ** 15
+SCRYPT_R = 8
+SCRYPT_P = 1
+
+
+def _scrypt(password, salt, n, r, p):
+    return hashlib.scrypt(password.encode('utf-8'), salt=salt,
+        n=n, r=r, p=p, maxmem=128 * r * (n + p + 2), dklen=64)
+
+
+def hash_password(password):
+    '''return a salted scrypt hash formatted as scrypt$n$r$p$salt$hash'''
+    salt = os.urandom(16)
+    digest = _scrypt(password, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P)
+    salt   = base64.b64encode(salt).decode('ascii')
+    digest = base64.b64encode(digest).decode('ascii')
+    return f'scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${salt}${digest}'
+
+
+def verify_password(password, stored):
+    '''check a password against a stored hash'''
+    if not password:
+        return False
+    try:
+        scheme,n,r,p,salt,digest = (stored or '').split('$')
+        if scheme != 'scrypt':
+            raise ValueError(scheme)
+        n,r,p  = int(n), int(r), int(p)
+        salt   = base64.b64decode(salt)
+        digest = base64.b64decode(digest)
+    except (ValueError,binascii.Error):
+        # hash anyway, so unknown users take as long as wrong passwords
+        _scrypt(password, b'', SCRYPT_N, SCRYPT_R, SCRYPT_P)
+        return False
+    return hmac.compare_digest(_scrypt(password, salt, n, r, p), digest)
+
+
+# based on tornado.web.authenticated
+def _next(handler):
+    if handler.request.method in ('GET','HEAD'):
+        url = handler.get_login_url()
+        if '?' not in url:
+            if urllib.parse.urlsplit(url).scheme:
+                next_url = handler.request.full_url()
+            else:
+                next_url = handler.request.uri
+            url += '?' + urllib.parse.urlencode(dict(next=next_url))
+        handler.redirect(url)
+    else:
+        raise {{ py_name }}.HTTPError(403)
+
+
+# call filter_func with the handler, the method is called if it returns true
+def filter(filter_func):
+    def _filter(method):
+        @functools.wraps(method)
+        def wrapper(self, *args, **kwds):
+            if filter_func(self):
+                return method(self, *args, **kwds)
+            _next(self)
+        return wrapper
+    return _filter
+
+
+# call filter_func with the session of a logged in user, the method is
+# called if it returns true
+def filter_user(filter_func):
+    def _filter_user(method):
+        @functools.wraps(method)
+        def wrapper(self, *args, **kwds):
+            if self.current_user:
+                if filter_func(self.current_user):
+                    return method(self, *args, **kwds)
+            _next(self)
+        return wrapper
+    return _filter_user
+
+
+# any logged in user
+current_user = filter_user(lambda current_user: True)
+
+
+# user name and password in the request, for command line tools
+def basic(realm='{{ proper_name }}'):
+    def basic_auth(method):
+        @functools.wraps(method)
+        async def wrapper(self, *args, **kwds):
+            auth = self.request.headers.get('Authorization', '')
+            if auth.startswith('Basic '):
+                try:
+                    auth = base64.b64decode(auth[6:]).decode('utf-8')
+                    username,password = auth.split(':', 1)
+                except (binascii.Error,UnicodeDecodeError,ValueError):
+                    raise {{ py_name }}.HTTPError(400) from None
+                if await check(username, password):
+                    return await {{ py_name }}.wait(method(self, *args, **kwds))
+            self.set_status(401)
+            self.set_header('WWW-Authenticate', f'Basic realm="{realm}"')
+            self.finish()
+        return wrapper
+    return basic_auth

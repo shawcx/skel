@@ -56,6 +56,7 @@ check the sorted `features` list instead:
     from . import systemd
     {% end %}
 
-| Feature   | Adds                                                              |
-|-----------|-------------------------------------------------------------------|
-| `systemd` | `--systemd [<user>]`, which writes a systemd service for the app |
+| Feature   | Adds                                                                         |
+|-----------|------------------------------------------------------------------------------|
+| `auth`    | logins for every page and the WebSocket, with users added by `--add-user`   |
+| `systemd` | `--systemd [<user>]`, which writes a systemd service for the app            |

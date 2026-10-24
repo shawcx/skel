@@ -1,0 +1,51 @@
+
+import tornado.web
+
+import {{ py_name }}
+
+
+class Login(tornado.web.RequestHandler):
+    def get(self):
+        self.render('login.html', message=None, next_url=self.next_url())
+
+    async def post(self):
+        # the form carries an _xsrf token so other sites can't log people in
+        self.check_xsrf_cookie()
+
+        username = self.get_argument('username', '')
+        password = self.get_argument('password', '')
+
+        if not await {{ py_name }}.auth.check(username, password):
+            await {{ py_name }}.wait(self.application.on_login_failure(self, username))
+            self.set_status(403)
+            self.render('login.html', message='Invalid login', next_url=self.next_url())
+            return
+
+        session = await {{ py_name }}.wait(self.application.on_login_success(self, username))
+        await {{ py_name }}.wait({{ py_name }}.sessions.save_session(session))
+        self.set_signed_cookie('session_id', session['session_id'],
+            expires_days = {{ py_name }}.auth.expires() / 24,
+            httponly     = True,
+            samesite     = 'Lax',
+            secure       = self.request.protocol == 'https',
+            )
+        self.redirect(self.next_url())
+
+    def next_url(self):
+        url = self.get_argument('next', '/')
+        # only go to paths on this site, //host and /\host are other sites
+        if not url.startswith('/') or url.startswith(('//', '/\\')):
+            url = '/'
+        return url
+
+
+class Logout(tornado.web.RequestHandler):
+    async def get(self):
+        session_id = self.get_signed_cookie('session_id')
+        if session_id:
+            session_id = session_id.decode('utf-8')
+            await {{ py_name }}.wait(self.application.on_logout(session_id))
+            await {{ py_name }}.wait({{ py_name }}.sessions.clear_session(session_id))
+
+        self.clear_cookie('session_id')
+        self.redirect('/')

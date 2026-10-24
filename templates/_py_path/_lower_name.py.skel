@@ -3,6 +3,9 @@ import asyncio
 import logging
 import secrets
 import signal
+{% if 'auth' in features %}
+import time
+{% end %}
 import traceback
 
 import tornado.web
@@ -15,6 +18,9 @@ import {{ py_name }}
 
 from . import settings
 from . import handlers
+{% if 'auth' in features %}
+from . import auth
+{% end %}
 {% if 'systemd' in features %}
 from . import systemd
 {% end %}
@@ -40,8 +46,6 @@ class {{ proper_name }}(tornado.web.Application):
 
         self.patterns = []
         self.settings = {}
-        self._records_patterns = []
-        self._login_patterns = []
 
         {{ py_name }}.argparser.add_argument('--address', '-a',
             metavar='<address>',
@@ -51,6 +55,10 @@ class {{ proper_name }}(tornado.web.Application):
             metavar='<port>',
             type=int,
             help='Port to listen on')
+{% if 'auth' in features %}
+
+        auth.arguments()
+{% end %}
 {% if 'systemd' in features %}
 
         systemd.arguments()
@@ -62,6 +70,11 @@ class {{ proper_name }}(tornado.web.Application):
 {% if 'systemd' in features %}
             # install the service instead of running
             if systemd.install():
+                self.stop()
+{% end %}
+{% if 'auth' in features %}
+            # add a user instead of running
+            if auth.add_user():
                 self.stop()
 {% end %}
         except {{ py_name }}.error as e:
@@ -77,9 +90,11 @@ class {{ proper_name }}(tornado.web.Application):
                 logging.error('%s', e)
 
     async def _async_init(self, **kwds):
-        # a sessions component must provide load_session() and cookie_secret()
-        {{ py_name }}.sessions = None
+{% if 'auth' in features %}
+        # sessions must provide save_session(), load_session() and clear_session()
+        {{ py_name }}.sessions = auth.Sessions()
 
+{% end %}
         self.settings['static_path']   = {{ py_name }}.data('static')
         self.settings['template_path'] = {{ py_name }}.data('templates')
         self.settings['debug']         = {{ py_name }}.args.debug
@@ -92,17 +107,15 @@ class {{ proper_name }}(tornado.web.Application):
         except NotImplementedError:
             logging.warning('No "initialize" function defined')
 
-        patterns = list(self._records_patterns)
-
-        if self._login_patterns:
-            patterns.extend(self._login_patterns)
-            patterns.extend([
-                ( r'/login',  {{ py_name }}.logins.LoginPage ),
-                ( r'/logout', {{ py_name }}.logins.Logout    ),
-                ])
-            self.settings['login_url'] = '/login'
-
+{% if 'auth' in features %}
+        patterns = [
+            ( r'/login',  handlers.Login  ),
+            ( r'/logout', handlers.Logout ),
+            ]
         patterns.extend(self.patterns)
+{% else %}
+        patterns = list(self.patterns)
+{% end %}
 
         # prepend prefix specified in the ini file, useful for nginx reverse proxy
         prefix = {{ py_name }}.config.get('{{ lower_name }}', 'prefix', fallback='')
@@ -114,6 +127,9 @@ class {{ proper_name }}(tornado.web.Application):
             patterns.append(
                 ( r'/(favicon.ico)', tornado.web.StaticFileHandler, {'path':self.settings['static_path']}),
                 )
+{% if 'auth' in features %}
+        self.settings['login_url'] = f'{prefix}/login'
+{% end %}
 
         if {{ py_name }}.args.debug:
             for (pattern,cls,*params) in patterns:
@@ -130,8 +146,13 @@ class {{ proper_name }}(tornado.web.Application):
     async def initialize(self):
         '''application entry point, add patterns and settings here'''
         self.patterns.extend([
+{% if 'auth' in features %}
+            ( r'/',   handlers.Protected       ),
+            ( r'/ws', handlers.ProtectedSocket ),
+{% else %}
             ( r'/',   handlers.Template  ),
             ( r'/ws', handlers.WebSocket ),
+{% end %}
             ])
 
     async def logging(self):
@@ -222,36 +243,30 @@ class {{ proper_name }}(tornado.web.Application):
         except Exception as e:
             raise {{ py_name }}.error('%s', e) from None
 
-    def _record_handler(self, component, cls):
-        '''called from {{ py_name }}.records component to add handler'''
-        self._records_patterns.append(
-            (f'/{component}/{cls._component}(?:/(.*))?', cls)
-            )
-
-    def _login_handler(self, component, cls):
-        '''called from {{ py_name }}.logins component to add handler'''
-        self._login_patterns.append(
-            (f'/{component}/{cls._component}', cls)
-            )
-
     async def cookie_secret(self):
         '''applications can override this function'''
-        if {{ py_name }}.sessions is not None:
-            return await {{ py_name }}.wait({{ py_name }}.sessions.cookie_secret())
         secret = {{ py_name }}.config.get('{{ lower_name }}', 'cookie_secret', fallback=None)
         if not secret:
-            logging.debug('No cookie_secret configured, sessions will not survive a restart')
+            logging.debug('No cookie_secret configured, signed cookies will not survive a restart')
             secret = secrets.token_hex(32)
         return secret
+{% if 'auth' in features %}
 
-    async def on_login_success(self, handler, user, *args, **kwds):
-        '''applications should override this function if a login component is specified'''
-        raise NotImplementedError
+    async def on_login_success(self, handler, username):
+        '''return the session for a user who logged in, it must have a session_id'''
+        return {
+            'session_id' : secrets.token_urlsafe(32),
+            'username'   : username,
+            'agent'      : handler.request.headers.get('User-Agent', ''),
+            'ip'         : handler.request.remote_ip,
+            'time'       : time.time(),
+            }
 
-    async def on_login_failure(self, component, *args, **kwds):
-        '''applications should override this function if a login component is specified'''
+    async def on_login_failure(self, handler, username):
+        '''called after a failed login'''
         pass
 
-    async def on_logout(self, sessions_id):
-        '''applications should override this function if a login component is specified'''
+    async def on_logout(self, session_id):
+        '''called before a session is cleared'''
         pass
+{% end %}

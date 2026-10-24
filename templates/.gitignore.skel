@@ -13,3 +13,6 @@ __pycache__/
 # local settings and logs
 /{{ py_path }}/data/{{ lower_name }}.ini.local
 /{{ py_path }}/data/{{ lower_name }}.log
+{% if 'auth' in features %}
+/{{ py_path }}/data/{{ lower_name }}.users
+{% end %}

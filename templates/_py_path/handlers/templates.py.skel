@@ -8,26 +8,23 @@ class Template(tornado.web.RequestHandler):
     def initialize(self, template='index', **kwds):
         self.kwds = kwds
         self.template = template + '.html'
+{% if 'auth' in features %}
+
+    async def prepare(self):
+        # so templates can show who is logged in
+        self.current_user = await {{ py_name }}.auth.session(self)
+{% end %}
 
     def get(self, template=None, *args):
         template = template + '.html' if template else self.template
         self.render(template, extra=args, **self.kwds)
+{% if 'auth' in features %}
 
 
 class Protected(Template):
-    async def prepare(self):
-        if {{ py_name }}.sessions is None:
-            raise {{ py_name }}.HTTPError(500, 'No session component specified')
-
-        self.session = None
-        session_id = self.get_secure_cookie('session_id', max_age_days=1)
-        if session_id:
-            session_id = session_id.decode('utf-8')
-            self.session = await {{ py_name }}.wait({{ py_name }}.sessions.load_session(session_id))
-
-    def get_current_user(self):
-        return self.session
+    '''Require a logged in user, others are sent to the login page'''
 
     @tornado.web.authenticated
     def get(self, template=None, *args):
         super().get(template, *args)
+{% end %}

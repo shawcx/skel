@@ -1,3 +1,9 @@
 
+{% if 'auth' in features %}
 from .templates  import Template,Protected
 from .websockets import WebSocket,ProtectedSocket
+from .login      import Login,Logout
+{% else %}
+from .templates  import Template
+from .websockets import WebSocket
+{% end %}

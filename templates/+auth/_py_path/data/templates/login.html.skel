@@ -1,0 +1,27 @@
+{%! extends 'base.template' %}
+
+{%! block nav %}{%! end %}
+
+{%! block body %}
+  <div class="card col-md-6 col-lg-4 mx-auto">
+    <h4 class="card-header">{{ proper_name }}</h4>
+    <div class="card-body">
+      <form action="{{! request.path }}" method="POST">
+        {%! module xsrf_form_html() %}
+        <input type="hidden" name="next" value="{{! next_url }}">
+        <div class="mb-3">
+          <label for="username" class="form-label">User</label>
+          <input type="text" class="form-control" id="username" name="username" autocomplete="username" required autofocus>
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" name="password" autocomplete="current-password" required>
+        </div>
+{%! if message %}
+        <div class="alert alert-danger">{{! message }}</div>
+{%! end %}
+        <button type="submit" class="btn btn-primary float-end">Log in</button>
+      </form>
+    </div>
+  </div>
+{%! end %}

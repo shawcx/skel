@@ -8,8 +8,16 @@ port    = 8080
 # also log to {{ lower_name }}.log in the data directory
 #logging = true
 
-# keep sessions valid across restarts, otherwise a random secret is generated
+# secret for signed cookies, a random one is made at each start if not set
 #cookie_secret =
+{% if 'auth' in features %}
+
+[auth]
+# hours that a login lasts
+#expires = 24
+# user:hash lines written by --add-user, relative to the data directory
+#users = {{ lower_name }}.users
+{% end %}
 {% if 'systemd' in features %}
 
 # settings for --systemd, any {name} in systemd.service can be set here

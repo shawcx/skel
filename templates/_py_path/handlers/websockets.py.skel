@@ -35,20 +35,14 @@ class WebSocket(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         self.websockets.pop(id(self), None)
+{% if 'auth' in features %}
 
 
 class ProtectedSocket(WebSocket):
-    '''Require a valid user session to establish WebSocket connection'''
+    '''Require a logged in user to open the WebSocket'''
 
     async def prepare(self):
-        if {{ py_name }}.sessions is None:
-            raise {{ py_name }}.HTTPError(500, 'No session component specified')
-
-        self.session_id = self.get_secure_cookie('session_id')
-        if not self.session_id:
+        self.current_user = await {{ py_name }}.auth.session(self)
+        if not self.current_user:
             raise {{ py_name }}.HTTPError(403)
-        self.session_id = self.session_id.decode('utf-8')
-
-        self.session = await {{ py_name }}.wait({{ py_name }}.sessions.load_session(self.session_id))
-        if not self.session:
-            raise {{ py_name }}.HTTPError(403)
+{% end %}

@@ -5,12 +5,14 @@ the web assets are not built, so this runs offline
 '''
 
 import asyncio
+import http.cookies
 import os
 import socket
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import zipfile
 
@@ -35,10 +37,20 @@ def free_port():
         return s.getsockname()[1]
 
 
-async def check_websockets(port):
+async def refused(url, headers):
+    request = tornado.httpclient.HTTPRequest(url, headers=headers)
+    try:
+        await tornado.websocket.websocket_connect(request)
+    except tornado.httpclient.HTTPClientError as e:
+        assert e.code == 403, e
+    else:
+        raise AssertionError(f'WebSocket was accepted with {headers}')
+
+
+async def check_websockets(port, headers={}):
     url = f'ws://127.0.0.1:{port}/ws'
-    a = await tornado.websocket.websocket_connect(url)
-    b = await tornado.websocket.websocket_connect(url)
+    a = await tornado.websocket.websocket_connect(tornado.httpclient.HTTPRequest(url, headers=headers))
+    b = await tornado.websocket.websocket_connect(tornado.httpclient.HTTPRequest(url, headers=headers))
 
     # the ping keep-alive must not be relayed, so the first message b sees is the JSON
     await a.write_message('ping')
@@ -46,13 +58,58 @@ async def check_websockets(port):
     msg = await asyncio.wait_for(b.read_message(), 2)
     assert msg == '{"action":"test"}', f'unexpected relay: {msg!r}'
 
-    request = tornado.httpclient.HTTPRequest(url, headers={'Origin':'http://example.com'})
-    try:
-        await tornado.websocket.websocket_connect(request)
-    except tornado.httpclient.HTTPClientError as e:
-        assert e.code == 403, e
-    else:
-        raise AssertionError('cross-origin WebSocket was accepted')
+    await refused(url, dict(headers, Origin='http://example.com'))
+
+
+def cookies(rsp):
+    '''the cookies that a response sets'''
+    jar = http.cookies.SimpleCookie()
+    for header in rsp.headers.get_list('Set-Cookie'):
+        jar.load(header)
+    return {name:morsel.value for name,morsel in jar.items()}
+
+
+async def check_auth(port):
+    client = tornado.httpclient.AsyncHTTPClient()
+
+    async def fetch(path, jar=None, **form):
+        kwds = dict(follow_redirects=False, raise_error=False)
+        if jar:
+            kwds['headers'] = {'Cookie':'; '.join(f'{k}={v}' for k,v in jar.items())}
+        if form:
+            kwds.update(method='POST', body=urllib.parse.urlencode(form))
+        return await client.fetch(f'http://127.0.0.1:{port}{path}', **kwds)
+
+    # pages and the WebSocket need a login
+    rsp = await fetch('/')
+    assert rsp.code == 302 and rsp.headers['Location'] == '/login?next=%2F', rsp
+    await refused(f'ws://127.0.0.1:{port}/ws', {})
+
+    # the login page sets the xsrf cookie, the form must send it back
+    rsp = await fetch('/login?next=/')
+    assert rsp.code == 200 and b'name="_xsrf"' in rsp.body, rsp
+    jar = cookies(rsp)
+    rsp = await fetch('/login', username='alice', password='secret')
+    assert rsp.code == 403, rsp
+
+    rsp = await fetch('/login', jar, _xsrf=jar['_xsrf'], username='alice', password='wrong')
+    assert rsp.code == 403 and b'Invalid login' in rsp.body, rsp
+
+    # next can't send people to another site
+    rsp = await fetch('/login', jar, _xsrf=jar['_xsrf'], username='alice', password='secret', next='//example.com')
+    assert rsp.code == 302 and rsp.headers['Location'] == '/', rsp
+    jar.update(cookies(rsp))
+    assert 'session_id' in jar, jar
+
+    rsp = await fetch('/', jar)
+    assert rsp.code == 200 and b'alice' in rsp.body, rsp
+    await check_websockets(port, {'Cookie':f'session_id={jar["session_id"]}'})
+
+    # logging out ends the session, not just the cookie
+    rsp = await fetch('/logout', jar)
+    assert rsp.code == 302, rsp
+    rsp = await fetch('/', jar)
+    assert rsp.code == 302, rsp
 
 
 def check_options(tmp):
@@ -89,6 +146,7 @@ def check(tmp, namespace, features):
             (os.path.join(static, 'favicon.ico'), False),
             (os.path.join(package, 'data', 'smoke.ini'), False),
             (os.path.join(project, 'src', 'package-lock.json'), False),
+            *([(os.path.join(package, 'data', 'smoke.users'), True)] if 'auth' in features else []),
             ]:
         rc = subprocess.run(['git', '-C', project, 'check-ignore', '-q', path]).returncode
         assert (rc == 0) == ignored, f'{path} should {"" if ignored else "not "}be ignored'
@@ -120,6 +178,17 @@ def check(tmp, namespace, features):
             env=env, capture_output=True).returncode
         assert rc == 2, f'--systemd without the feature exited with {rc}'
 
+    step('auth')
+    if 'auth' in features:
+        run(sys.executable, '-m', module, '--add-user', 'alice', env=env, input='secret\n', text=True)
+        with open(os.path.join(package, 'data', 'smoke.users')) as fp:
+            assert fp.read().startswith('alice:scrypt$'), 'user not saved'
+    else:
+        assert not os.path.exists(os.path.join(package, 'auth.py'))
+        rc = subprocess.run([sys.executable, '-m', module, '--add-user', 'alice'],
+            env=env, capture_output=True).returncode
+        assert rc == 2, f'--add-user without the feature exited with {rc}'
+
     step('serve')
     port = free_port()
     server = subprocess.Popen([sys.executable, '-m', module, '--port', str(port)],
@@ -139,12 +208,15 @@ def check(tmp, namespace, features):
         with urllib.request.urlopen(f'http://127.0.0.1:{port}/favicon.ico') as rsp:
             assert rsp.status == 200
 
-        asyncio.run(check_websockets(port))
+        asyncio.run(check_auth(port) if 'auth' in features else check_websockets(port))
     finally:
         server.terminate()
         server.wait(5)
 
     step('wheel')
+    # files made at run time must stay out of the wheel
+    for name in ('smoke.ini.local', 'smoke.log'):
+        open(os.path.join(package, 'data', name), 'w').close()
     dist = os.path.join(project, 'dist')
     run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
         '-q', '-w', dist, project)
@@ -158,14 +230,18 @@ def check(tmp, namespace, features):
     expected = ['smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html']
     if 'systemd' in features:
         expected += ['systemd.py', 'data/systemd.service']
+    if 'auth' in features:
+        expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
     for name in expected:
         assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
+    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users'):
+        assert f'{prefix}/{name}' not in names, f'{prefix}/{name} is in the wheel'
 
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
-        for namespace,features in [('skunk', []), ('', []), ('skunk', ['systemd'])]:
+        for namespace,features in [('skunk', []), ('', []), ('skunk', ['auth', 'systemd'])]:
             print(f'== namespace {namespace!r} features {features}', flush=True)
             check(tmp, namespace, features)
 

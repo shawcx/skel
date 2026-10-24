@@ -35,3 +35,13 @@ include = ["{{ namespace or lower_name }}*"]
 
 [tool.setuptools.package-data]
 "{{ py_name }}" = ["data/**/*"]
+
+# files made at run time stay out of the wheel
+[tool.setuptools.exclude-package-data]
+"{{ py_name }}" = [
+    "data/{{ lower_name }}.ini.local",
+    "data/{{ lower_name }}.log",
+{% if 'auth' in features %}
+    "data/{{ lower_name }}.users",
+{% end %}
+]

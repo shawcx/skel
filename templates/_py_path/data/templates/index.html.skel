@@ -1,5 +1,7 @@
 {%! extends 'base.template' %}
 
+{%! block vars %}{%! set nav_home = "active" %}{%! end %}
+
 {%! block scripts %}
 <script src="{{! static_url('js/{{ lower_name }}.js') }}"></script>
 {%! end %}
@@ -8,11 +10,13 @@
   <div class="card text-bg-dark">
     <h2 class="card-header">
       {{ proper_name }}
+{% if 'auth' in features %}
 {%! if current_user %}
       <span class="float-end">
         <small><i class="fa fa-user"></i> {{! current_user['username'] }}</small>
       </span>
 {%! end %}
+{% end %}
     </h2>
   </div>
 {%! end %}
