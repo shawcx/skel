@@ -1,0 +1,34 @@
+{% if 'frontend' in features %}
+# build the web assets with npm, then install the app into a slim Python image
+FROM node:24.22 AS frontend
+WORKDIR /build/src
+COPY src/package.json ./
+RUN npm install --no-audit --no-fund
+COPY src/ ./
+RUN make
+
+{% end %}
+FROM python:3.15-slim
+
+# the app runs as an unprivileged user whose home, /data, holds its files
+RUN useradd --system --uid 1000 --home-dir /data --create-home {{ lower_name }}
+
+COPY . /build
+{% if 'frontend' in features %}
+COPY --from=frontend /build/{{ py_path }}/data/static /build/{{ py_path }}/data/static
+{% end %}
+RUN pip install --no-cache-dir --root-user-action=ignore /build && rm -rf /build
+
+# settings for the container, ~/.{{ lower_name }}.ini in the data volume can change them
+COPY docker/{{ lower_name }}.ini /etc/{{ namespace or lower_name }}/{{ lower_name }}.ini
+
+USER {{ lower_name }}
+WORKDIR /data
+{% if 'web' in features %}
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD ["python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), 2)"]
+{% end %}
+
+# arguments after the image name go to the app, like --add-user
+ENTRYPOINT ["{{ lower_name }}"]

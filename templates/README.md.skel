@@ -37,6 +37,25 @@ a restart. Set `users` and `sessions` in the `[auth]` section of the ini file to
 elsewhere, for example when the package is installed. `on_login_success()` in
 `{{ py_path }}/{{ lower_name }}.py` decides what goes in a session.
 {% end %}
+{% if 'docker' in features %}
+
+## Docker
+
+Build the image and start the app in the background:
+
+    docker compose up -d --build
+{% if 'auth' in features %}
+    docker compose run --rm {{ lower_name }} --add-user <user>
+{% end %}
+
+{% if 'web' in features %}
+It listens on `127.0.0.1:8080` of this host, or the port in `PORT`, and keeps its files in
+{% else %}
+It keeps its files in
+{% end %}
+the `data` volume. `docker/{{ lower_name }}.ini` has the settings for the container, and
+`/data/.{{ lower_name }}.ini` in the volume can change them.
+{% end %}
 {% if 'sqlite' in features %}
 
 ## Database

@@ -1,0 +1,26 @@
+.git
+**/__pycache__
+.pytest_cache
+build/
+dist/
+*.egg-info/
+{% if 'frontend' in features %}
+
+# the image builds the web assets itself
+src/node_modules/
+{{ py_path }}/data/static/css/
+{{ py_path }}/data/static/js/
+{{ py_path }}/data/static/webfonts/
+{% end %}
+
+# local settings, logs, users and data stay out of the image
+{{ py_path }}/data/{{ lower_name }}.ini.local
+{{ py_path }}/data/{{ lower_name }}.log
+{% if 'auth' in features %}
+{{ py_path }}/data/{{ lower_name }}.users
+{{ py_path }}/data/{{ lower_name }}.sessions
+{% end %}
+{% if 'sqlite' in features %}
+{{ py_path }}/data/{{ lower_name }}.db
+{{ py_path }}/data/{{ lower_name }}.db-journal
+{% end %}

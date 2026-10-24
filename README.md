@@ -78,6 +78,7 @@ so `--without web` also leaves out `frontend`.
 | `web`      | on by default: the Tornado server, handlers, page templates and a WebSocket   |
 | `frontend` | on by default: Bootstrap, Font Awesome and the JS in `src/`, built with npm   |
 | `auth`     | logins for every page and the WebSocket, with users added by `--add-user`     |
+| `docker`   | a Dockerfile and compose.yaml that run the app as a locked-down container     |
 | `github`   | a GitHub Actions workflow that runs the tests and builds the web assets       |
 | `gitlab`   | a GitLab CI pipeline that runs the tests and builds the web assets            |
 | `nginx`    | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |

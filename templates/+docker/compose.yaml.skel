@@ -1,0 +1,23 @@
+services:
+  {{ lower_name }}:
+    build: .
+    restart: unless-stopped
+{% if 'web' in features %}
+    ports:
+      # only this host can connect, put nginx or another proxy in front for others
+      - "127.0.0.1:${PORT:-8080}:8080"
+{% end %}
+    volumes:
+      - data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { memory: 512m }
+    logging:
+      driver: local
+
+volumes:
+  data: {}

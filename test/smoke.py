@@ -319,7 +319,8 @@ def check(tmp, namespace, features, prefix):
 
     # which files the features add
     for name,feature in [('src/Makefile', 'frontend'), (f'{module.replace(".", "/")}/handlers/base.py', 'web'),
-            ('.github/workflows/test.yml', 'github'), ('.gitlab-ci.yml', 'gitlab')]:
+            ('.github/workflows/test.yml', 'github'), ('.gitlab-ci.yml', 'gitlab'),
+            ('Dockerfile', 'docker'), ('compose.yaml', 'docker'), ('docker/smoke.ini', 'docker')]:
         assert os.path.isfile(os.path.join(project, name)) == (feature in features), name
 
     if 'web' in features:
@@ -418,14 +419,14 @@ def main():
             return 1
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
-        everything = ['auth', 'frontend', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd', 'web']
+        everything = ['auth', 'docker', 'frontend', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd', 'web']
         for namespace,features,prefix in [
                 ('skunk', DEFAULTS, ''),
                 ('', DEFAULTS, ''),
                 ('skunk', everything, '/app'),
                 # without a frontend, and without web at all
                 ('', ['auth', 'web'], ''),
-                ('skunk', ['github', 'sqlite', 'systemd'], ''),
+                ('skunk', ['docker', 'github', 'sqlite', 'systemd'], ''),
                 ]:
             print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
             check(tmp, namespace, features, prefix)

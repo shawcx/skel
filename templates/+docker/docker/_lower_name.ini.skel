@@ -1,0 +1,18 @@
+# copied to /etc/{{ namespace or lower_name }}/{{ lower_name }}.ini in the image
+[{{ lower_name }}]
+{% if 'web' in features %}
+# listen on every interface of the container, compose.yaml decides what reaches it
+address = 0.0.0.0
+port    = 8080
+{% end %}
+{% if 'auth' in features %}
+
+[auth]
+users    = /data/{{ lower_name }}.users
+sessions = /data/{{ lower_name }}.sessions
+{% end %}
+{% if 'sqlite' in features %}
+
+[sqlite]
+path = /data/{{ lower_name }}.db
+{% end %}
