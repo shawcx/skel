@@ -2,8 +2,14 @@
 
 ## Build
 
+{% if 'frontend' in features %}
     make            # build the web assets in src/ (runs npm install on first use)
+{% end %}
+{% if 'web' in features %}
     make run        # run from the source tree on http://127.0.0.1:8080/
+{% else %}
+    make run        # run from the source tree, until Ctrl-C or SIGTERM
+{% end %}
     make test       # run the tests in tests/, needs pytest (pip install '.[test]')
     make install    # pip install the package
 

@@ -1,23 +1,31 @@
 
 import asyncio
 import logging
+{% if 'web' in features %}
 import secrets
+{% end %}
 import signal
 {% if 'auth' in features %}
 import time
 {% end %}
 import traceback
+{% if 'web' in features %}
 
 import tornado.web
+{% end %}
 
 import {{ py_name }}
 
+{% if 'web' in features %}
 
 # alias so handlers don't have to import tornado.web directly
 {{ py_name }}.HTTPError = tornado.web.HTTPError
 
+{% end %}
 from . import settings
+{% if 'web' in features %}
 from . import handlers
+{% end %}
 {% if 'auth' in features %}
 from . import auth
 {% end %}
@@ -32,7 +40,11 @@ from . import systemd
 {% end %}
 
 
+{% if 'web' in features %}
 class {{ proper_name }}(tornado.web.Application):
+{% else %}
+class {{ proper_name }}:
+{% end %}
     @classmethod
     def main(cls):
         '''run the application, returns the exit code'''
@@ -52,6 +64,7 @@ class {{ proper_name }}(tornado.web.Application):
 
         signal.signal(signal.SIGINT,  self.__signalHandler)
         signal.signal(signal.SIGTERM, self.__signalHandler)
+{% if 'web' in features %}
 
         self.patterns = []
         self.settings = {}
@@ -64,6 +77,7 @@ class {{ proper_name }}(tornado.web.Application):
             metavar='<port>',
             type=int,
             help='Port to listen on')
+{% end %}
 {% if 'auth' in features %}
 
         auth.arguments()
@@ -111,17 +125,20 @@ class {{ proper_name }}(tornado.web.Application):
         await db.connect()
 
 {% end %}
+{% if 'web' in features %}
         self.settings['static_path']   = {{ py_name }}.data('static')
         self.settings['template_path'] = {{ py_name }}.data('templates')
         self.settings['debug']         = {{ py_name }}.args.debug
         if 'cookie_secret' not in self.settings:
             self.settings['cookie_secret'] = await self.cookie_secret()
 
+{% end %}
         # call the application's entry point
         try:
             await {{ py_name }}.wait(self.initialize())
         except NotImplementedError:
             logging.warning('No "initialize" function defined')
+{% if 'web' in features %}
 
 {% if 'auth' in features %}
         patterns = [
@@ -154,6 +171,10 @@ class {{ proper_name }}(tornado.web.Application):
                 logging.debug('%-32s %s %s', pattern, handler, params[0] if params else '')
 
         await self.__listen(patterns)
+{% else %}
+
+        logging.info('{{ proper_name }} is running')
+{% end %}
 
         # block until the stop event is set
         await self._stop_event.wait()
@@ -163,23 +184,30 @@ class {{ proper_name }}(tornado.web.Application):
         await db.close()
 {% end %}
 
+{% if 'web' in features %}
     async def initialize(self):
         '''application entry point, add patterns and settings here'''
         self.patterns.extend([
 {% if 'auth' in features %}
             ( r'/',   handlers.Protected       ),
             ( r'/ws', handlers.ProtectedSocket ),
-{% if 'sqlite' in features %}
-            ( r'/api/messages', handlers.Messages ),
-{% end %}
 {% else %}
             ( r'/',   handlers.Template  ),
             ( r'/ws', handlers.WebSocket ),
+{% end %}
 {% if 'sqlite' in features %}
             ( r'/api/messages', handlers.Messages ),
 {% end %}
-{% end %}
             ])
+{% else %}
+    async def initialize(self):
+        '''application entry point, start tasks here'''
+        # an example task, which runs every minute until the app stops
+        self.periodic(60, self.heartbeat)
+
+    def heartbeat(self):
+        logging.debug('{{ proper_name }} is still running')
+{% end %}
 
     async def logging(self):
         '''applications can override or extend this function'''
@@ -248,6 +276,7 @@ class {{ proper_name }}(tornado.web.Application):
     # and print newline after ^C on terminals
     def on_sigint(self, signum, frame):
         print()
+{% if 'web' in features %}
 
     async def __listen(self, patterns, **kwds):
         '''call the Tornado Application init here to give children a chance
@@ -281,6 +310,7 @@ class {{ proper_name }}(tornado.web.Application):
             logging.debug('No cookie_secret configured, signed cookies will not survive a restart')
             secret = secrets.token_hex(32)
         return secret
+{% end %}
 {% if 'auth' in features %}
 
     async def on_login_success(self, handler, username):

@@ -3,7 +3,9 @@
 {%! block vars %}{%! set nav_home = "active" %}{%! end %}
 
 {%! block scripts %}
+{% if 'frontend' in features %}
 <script src="{{! static_url('js/{{ lower_name }}.js') }}"></script>
+{% end %}
 {%! end %}
 
 {%! block body %}

@@ -1,5 +1,7 @@
 all:
+{% if 'frontend' in features %}
 	@$(MAKE) -C src
+{% end %}
 
 run:
 	PYTHONPATH=. python3 -m {{ py_name }}

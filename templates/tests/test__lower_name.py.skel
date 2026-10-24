@@ -1,17 +1,25 @@
 
+{% if 'web' in features %}
 import asyncio
+{% end %}
 import datetime
+{% if 'web' in features %}
 import json
+{% end %}
 {% if 'auth' in features %}
 import http.cookies
 import urllib.parse
-{% else %}
+{% elif 'web' in features %}
 import urllib.request
+{% else %}
+import os
 {% end %}
 
 import pytest
+{% if 'web' in features %}
 import tornado.httpclient
 import tornado.websocket
+{% end %}
 
 import {{ py_name }}
 from {{ py_name }} import version
@@ -31,6 +39,7 @@ def test_bad_ini(app):
 def test_json_encode():
     data = {'when': datetime.date(2026, 1, 2), 'raw': b'hi'}
     assert {{ py_name }}.json_encode(data) == '{"when": "2026-01-02", "raw": "aGk="}'
+{% if 'web' in features %}
 
 
 async def relay(app, headers={}):
@@ -42,6 +51,7 @@ async def relay(app, headers={}):
     b = await connect()
     await a.write_message(json.dumps({'action':'test'}))
     return json.loads(await asyncio.wait_for(b.read_message(), 5))
+{% end %}
 {% if 'auth' in features %}
 
 
@@ -126,7 +136,7 @@ def test_users(app):
     assert app.run('--remove-user', 'bob').returncode == 0
     assert app.run('--list-users').stdout.split() == ['alice']
     assert app.run('--remove-user', 'bob').returncode == 1
-{% else %}
+{% elif 'web' in features %}
 
 
 def test_page(app):
@@ -138,8 +148,20 @@ def test_page(app):
 def test_websocket(app):
     app.start()
     assert asyncio.run(relay(app)) == {'action':'test'}
-{% end %}
+{% else %}
+
+
+def test_runs(app):
+    app.start()
 {% if 'sqlite' in features %}
+    assert (app.tmp / 'test.db').exists()
+{% end %}
+    code = app.stop()
+    # terminate() sends SIGTERM, which stops {{ proper_name }} cleanly, but on Windows it kills it
+    if os.name == 'posix':
+        assert code == 0
+{% end %}
+{% if 'sqlite' in features and 'web' in features %}
 
 
 def test_messages(app):

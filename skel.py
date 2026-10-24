@@ -19,6 +19,16 @@ TEMPLATES = os.path.join(ROOT, 'templates')
 FEATURES = sorted(name[1:] for name in os.listdir(TEMPLATES)
     if name.startswith('+') and os.path.isdir(os.path.join(TEMPLATES, name)))
 
+# features that are on unless --without leaves them out
+DEFAULTS = ['frontend', 'web']
+
+# features that only work with other features
+REQUIRES = {
+    'auth'     : ['web'],
+    'frontend' : ['web'],
+    'nginx'    : ['web'],
+    }
+
 # a {% %} tag alone on a line, but not an escaped {%! %}
 TAG_LINE = re.compile(r'^[ \t]*(\{%(?!!)(?:(?!%\}).)*%\})[ \t]*\r?\n', re.M)
 
@@ -39,7 +49,11 @@ argparser.add_argument('--output', '-o',
 
 argparser.add_argument('--with',
     metavar='<feature>', dest='features', action='append', default=[],
-    help=f'add optional features, comma separated or repeated: {", ".join(FEATURES)}')
+    help=f'add optional features, comma separated or repeated: {", ".join(f for f in FEATURES if f not in DEFAULTS)}')
+
+argparser.add_argument('--without',
+    metavar='<feature>', action='append', default=[],
+    help=f'leave out features that are on by default: {", ".join(DEFAULTS)}')
 
 argparser.add_argument('--force',
     action='store_true',
@@ -88,10 +102,28 @@ class Skel:
 
         self.args = argparser.parse_args()
 
-        self.features = sorted(set(f for arg in self.args.features for f in arg.split(',') if f))
-        for feature in self.features:
+        chosen  = set(f for arg in self.args.features for f in arg.split(',') if f)
+        without = set(f for arg in self.args.without  for f in arg.split(',') if f)
+        for feature in sorted(chosen | without):
             if feature not in FEATURES:
                 argparser.error(f'unknown feature: {feature}, choose from {", ".join(FEATURES)}')
+        for feature in sorted(without):
+            if feature not in DEFAULTS:
+                argparser.error(f'{feature} is not on by default, --without works for {", ".join(DEFAULTS)}')
+            if feature in chosen:
+                argparser.error(f'{feature} is in both --with and --without')
+
+        features = set(DEFAULTS) - without | chosen
+        # a default feature that needs a feature left out goes too, so
+        # --without web also leaves out frontend
+        for feature in DEFAULTS:
+            if feature not in chosen and not set(REQUIRES.get(feature, [])) <= features:
+                features.discard(feature)
+        for feature in sorted(features):
+            for needed in REQUIRES.get(feature, []):
+                if needed not in features:
+                    argparser.error(f'{feature} needs {needed}')
+        self.features = sorted(features)
 
         self.project = jsxn.Project()
         # optional values from values.txt default to empty
@@ -179,12 +211,17 @@ class Skel:
 
         for dest,path in sources.items():
             try:
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
                 if path.endswith('.skel'):
                     content = loader.load(path).generate(features=self.features, **dict(self.project))
+                    # a template that renders to nothing, such as one that needs
+                    # a feature that isn't selected, isn't created
+                    if not content.strip():
+                        continue
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
                     with open(dest, 'wb') as fp:
                         fp.write(content)
                 else:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
                     shutil.copy(os.path.join(self.templates, path), dest)
             except Exception as e:
                 print(f'{path}: {e}', file=sys.stderr)

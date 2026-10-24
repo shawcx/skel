@@ -1,5 +1,5 @@
-# the tests on the oldest Python that pyproject.toml supports and the newest,
-# and the web assets build
+# the tests on the oldest Python that pyproject.toml supports and the newest{% if 'frontend' in features %},
+# and the web assets build{% end %}
 
 test:
   image: python:$PYTHON
@@ -9,8 +9,10 @@ test:
   script:
     - pip install -q '.[test]'
     - python -m pytest
+{% if 'frontend' in features %}
 
 frontend:
   image: node:24
   script:
     - make -C src
+{% end %}

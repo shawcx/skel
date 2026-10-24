@@ -1,15 +1,19 @@
 [{{ lower_name }}]
+{% if 'web' in features %}
 address = 127.0.0.1
 port    = 8080
 
 # prepend a path to every route, useful behind a reverse proxy
 #prefix = /{{ lower_name }}
 
+{% end %}
 # also log to {{ lower_name }}.log in the data directory
 #logging = true
+{% if 'web' in features %}
 
 # secret for signed cookies, a random one is made at each start if not set
 #cookie_secret =
+{% end %}
 {% if 'auth' in features %}
 
 [auth]

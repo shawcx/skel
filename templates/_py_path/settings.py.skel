@@ -81,9 +81,11 @@ async def load(**kwds):
         help='Show help message')
 
     {{ py_name }}.args = {{ py_name }}.argparser.parse_args()
+{% if 'web' in features %}
 
 
 def prefix():
     '''the prefix for every route from the ini file, like /{{ lower_name }}, or empty'''
     prefix = {{ py_name }}.config.get('{{ lower_name }}', 'prefix', fallback='').strip('/')
     return f'/{prefix}' if prefix else ''
+{% end %}

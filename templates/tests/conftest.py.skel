@@ -3,8 +3,10 @@ import os
 import socket
 import subprocess
 import sys
+{% if 'web' in features %}
 import time
 import urllib.request
+{% end %}
 
 import pytest
 
@@ -28,8 +30,10 @@ class App:
         # the --ini file is read last, so it wins over local settings
         self.ini.write_text(f"""
 [{{ lower_name }}]
+{% if 'web' in features %}
 address = 127.0.0.1
 prefix  =
+{% end %}
 {% if 'auth' in features %}
 
 [auth]
@@ -61,6 +65,7 @@ path = {tmp_path / '{{ lower_name }}.service'}
         return subprocess.run(self.command(*args), cwd=self.tmp, env=dict(os.environ, PYTHONPATH=ROOT),
             input=input, capture_output=True, text=True)
 
+{% if 'web' in features %}
     def start(self):
         '''start the server on a free port and wait until it answers'''
         self.port = free_port()
@@ -73,15 +78,29 @@ path = {tmp_path / '{{ lower_name }}.service'}
             except OSError:
                 time.sleep(0.1)
         raise AssertionError('{{ proper_name }} did not start')
+{% else %}
+    def start(self):
+        '''start {{ proper_name }} and wait until it logs that it's running'''
+        self.proc = subprocess.Popen(self.command(), cwd=self.tmp, env=dict(os.environ, PYTHONPATH=ROOT),
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        for line in self.proc.stderr:
+            if '{{ proper_name }} is running' in line:
+                return
+        raise AssertionError('{{ proper_name }} did not start')
+{% end %}
 
     def stop(self):
+        '''stop it the way a service manager would, returns the exit code'''
         if self.proc:
             self.proc.terminate()
-            self.proc.wait(10)
+            code = self.proc.wait(10)
             self.proc = None
+            return code
+{% if 'web' in features %}
 
     def url(self, path, scheme='http'):
         return f'{scheme}://127.0.0.1:{self.port}{path}'
+{% end %}
 
 
 @pytest.fixture

@@ -5,12 +5,14 @@ __pycache__/
 /dist/
 *.egg-info/
 
+{% if 'frontend' in features %}
 # web build, run make to recreate
 /src/node_modules/
 /{{ py_path }}/data/static/css/
 /{{ py_path }}/data/static/js/
 /{{ py_path }}/data/static/webfonts/
 
+{% end %}
 # local settings and logs
 /{{ py_path }}/data/{{ lower_name }}.ini.local
 /{{ py_path }}/data/{{ lower_name }}.log

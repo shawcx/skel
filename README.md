@@ -1,13 +1,16 @@
 # skel
 
-Generate a Tornado web application with a Bootstrap and WebSocket frontend.
+Generate a Tornado web application with a Bootstrap and WebSocket frontend, or with
+`--without web` a plain asyncio service.
 
 ## Usage
 
-    ./skel.py [--namespace <namespace>] [--output <directory>] [--with <feature>,...] [--force] [-V] <Project>
+    ./skel.py [--namespace <namespace>] [--output <directory>] [--with <feature>,...]
+              [--without <feature>,...] [--force] [-V] <Project>
 
     make run NAME=Slog NS=skunk     # same as ./skel.py --force --namespace skunk Slog
     make run WITH=systemd           # also passes --with systemd
+    make run WITHOUT=web            # also passes --without web
     make test                       # generate projects into a temp directory and check they work
     make test-frontend              # build a project's web assets and load it in headless Chrome (needs npm)
 
@@ -53,7 +56,8 @@ leave blank lines in the output.
 
 ## Features
 
-Optional features are added with `--with`. Each feature is a `templates/+<feature>/`
+Optional features are added with `--with`, and `web` and `frontend`, which are on by
+default, are left out with `--without`. Each feature is a `templates/+<feature>/`
 directory, laid out like `templates/`, whose files are added to the project. A feature
 can't replace a file that `templates/` or another feature creates. Shared templates
 check the sorted `features` list instead:
@@ -62,11 +66,20 @@ check the sorted `features` list instead:
     from . import systemd
     {% end %}
 
-| Feature   | Adds                                                                          |
-|-----------|-------------------------------------------------------------------------------|
-| `auth`    | logins for every page and the WebSocket, with users added by `--add-user`     |
-| `github`  | a GitHub Actions workflow that runs the tests and builds the web assets       |
-| `gitlab`  | a GitLab CI pipeline that runs the tests and builds the web assets            |
-| `nginx`   | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
-| `sqlite`  | a SQLite database through async SQLAlchemy, with an example model and API     |
-| `systemd` | `--systemd [<user>]`, which writes a systemd service for the app              |
+A template that renders to nothing isn't created, so a feature's file can depend on
+another feature by wrapping all of it in an `{% if %}`.
+
+`DEFAULTS` and `REQUIRES` in `skel.py` list the default features and the features that
+need others. Leaving out a feature also leaves out the default features that need it,
+so `--without web` also leaves out `frontend`.
+
+| Feature    | Adds                                                                          |
+|------------|-------------------------------------------------------------------------------|
+| `web`      | on by default: the Tornado server, handlers, page templates and a WebSocket   |
+| `frontend` | on by default: Bootstrap, Font Awesome and the JS in `src/`, built with npm   |
+| `auth`     | logins for every page and the WebSocket, with users added by `--add-user`     |
+| `github`   | a GitHub Actions workflow that runs the tests and builds the web assets       |
+| `gitlab`   | a GitLab CI pipeline that runs the tests and builds the web assets            |
+| `nginx`    | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
+| `sqlite`   | a SQLite database through async SQLAlchemy, with an example model and API     |
+| `systemd`  | `--systemd [<user>]`, which writes a systemd service for the app              |

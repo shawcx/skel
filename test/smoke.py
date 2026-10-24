@@ -23,6 +23,9 @@ import tornado.websocket
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+sys.path.insert(0, ROOT)
+from skel import DEFAULTS
+
 
 def step(name):
     print(f'-- {name}', flush=True)
@@ -180,12 +183,18 @@ async def check_auth(server):
 
 
 def check_options(tmp):
-    step('unknown feature')
-    project = os.path.join(tmp, 'unknown')
-    rc = subprocess.run([sys.executable, os.path.join(ROOT, 'skel.py'),
-        '--with', 'nope', '--output', project, 'Smoke'], capture_output=True).returncode
-    assert rc == 2, f'unknown feature exited with {rc}'
-    assert not os.path.exists(project), project
+    step('bad features')
+    project = os.path.join(tmp, 'bad')
+    for args,error in [
+            (['--with', 'nope'], 'unknown feature: nope'),
+            (['--without', 'auth'], 'auth is not on by default'),
+            (['--with', 'web', '--without', 'web'], 'web is in both --with and --without'),
+            (['--without', 'web', '--with', 'auth'], 'auth needs web'),
+            ]:
+        out = subprocess.run([sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke'],
+            capture_output=True, text=True)
+        assert out.returncode == 2 and error in out.stderr, (args, out)
+        assert not os.path.exists(project), project
 
 
 def check(tmp, namespace, features, prefix):
@@ -194,9 +203,12 @@ def check(tmp, namespace, features, prefix):
     package = os.path.join(project, *module.split('.'))
     env = dict(os.environ, PYTHONPATH=project)
 
+    # features are all of the project's, the options add and leave out the defaults
     args = ['--namespace', namespace] if namespace else []
-    if features:
-        args += ['--with', ','.join(features)]
+    if set(features) - set(DEFAULTS):
+        args += ['--with', ','.join(sorted(set(features) - set(DEFAULTS)))]
+    if set(DEFAULTS) - set(features):
+        args += ['--without', ','.join(sorted(set(DEFAULTS) - set(features)))]
 
     step('generate')
     run(sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke')
@@ -209,13 +221,13 @@ def check(tmp, namespace, features, prefix):
     run('git', 'init', '-q', project)
     static = os.path.join(package, 'data', 'static')
     for path,ignored in [
-            (os.path.join(static, 'css', 'smoke.css'), True),
-            (os.path.join(static, 'js', 'smoke.js'), True),
-            (os.path.join(project, 'src', 'node_modules', 'x'), True),
+            *([(os.path.join(static, 'css', 'smoke.css'), True),
+               (os.path.join(static, 'js', 'smoke.js'), True),
+               (os.path.join(project, 'src', 'node_modules', 'x'), True),
+               (os.path.join(project, 'src', 'package-lock.json'), False)] if 'frontend' in features else []),
+            *([(os.path.join(static, 'favicon.ico'), False)] if 'web' in features else []),
             (os.path.join(package, 'data', 'smoke.ini.local'), True),
-            (os.path.join(static, 'favicon.ico'), False),
             (os.path.join(package, 'data', 'smoke.ini'), False),
-            (os.path.join(project, 'src', 'package-lock.json'), False),
             *([(os.path.join(package, 'data', 'smoke.users'), True),
                (os.path.join(package, 'data', 'smoke.sessions'), True)] if 'auth' in features else []),
             *([(os.path.join(package, 'data', 'smoke.db'), True)] if 'sqlite' in features else []),
@@ -305,6 +317,53 @@ def check(tmp, namespace, features, prefix):
             env=env, capture_output=True).returncode
         assert rc == 2, f'--add-user without the feature exited with {rc}'
 
+    # which files the features add
+    for name,feature in [('src/Makefile', 'frontend'), (f'{module.replace(".", "/")}/handlers/base.py', 'web'),
+            ('.github/workflows/test.yml', 'github'), ('.gitlab-ci.yml', 'gitlab')]:
+        assert os.path.isfile(os.path.join(project, name)) == (feature in features), name
+
+    if 'web' in features:
+        check_serve(features, prefix, module, env, project, package)
+    else:
+        check_run(module, env, project)
+
+    step('pytest')
+    run(sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', cwd=project)
+
+    step('wheel')
+    # files made at run time must stay out of the wheel
+    for name in ('smoke.ini.local', 'smoke.log'):
+        open(os.path.join(package, 'data', name), 'w').close()
+    dist = os.path.join(project, 'dist')
+    run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
+        '-q', '-w', dist, project)
+    wheel = os.listdir(dist)
+    assert wheel == ['smoke-0.1.0-py3-none-any.whl'], wheel
+
+    # the package and its data files must be inside the wheel
+    with zipfile.ZipFile(os.path.join(dist, wheel[0])) as zf:
+        names = zf.namelist()
+    top = module.replace('.', '/')
+    expected = ['smoke.py', 'data/smoke.ini']
+    if 'web' in features:
+        expected += ['handlers/base.py', 'data/static/favicon.ico', 'data/templates/index.html']
+    if 'systemd' in features:
+        expected += ['systemd.py', 'data/systemd.service']
+    if 'nginx' in features:
+        expected += ['nginx.py', 'data/nginx.conf']
+    if 'sqlite' in features:
+        expected += ['db.py', 'models.py'] + (['handlers/messages.py'] if 'web' in features else [])
+    if 'auth' in features:
+        expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
+    for name in expected:
+        assert f'{top}/{name}' in names, f'{top}/{name} missing from wheel'
+    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users', 'data/smoke.sessions', 'data/smoke.db'):
+        assert f'{top}/{name}' not in names, f'{top}/{name} is in the wheel'
+    if 'web' not in features:
+        assert not any('/handlers/' in name for name in names), names
+
+
+def check_serve(features, prefix, module, env, project, package):
     step('serve')
     server = Server(module, env, project, prefix)
     body = server.start()
@@ -312,6 +371,9 @@ def check(tmp, namespace, features, prefix):
         assert '<title>Smoke</title>' in body, body
         # links and static files use the prefix
         assert f'data-prefix="{prefix}"' in body and f'href="{prefix}/static/' in body, body
+        # the stylesheet and script come with the frontend
+        stylesheet = f'href="{prefix}/static/css/smoke.css'
+        assert (stylesheet in body) == ('frontend' in features), body
 
         for path in [f'{prefix}/static/favicon.ico'] + ([] if prefix else ['/favicon.ico']):
             with urllib.request.urlopen(f'http://127.0.0.1:{server.port}{path}') as rsp:
@@ -327,38 +389,21 @@ def check(tmp, namespace, features, prefix):
             mode = os.stat(os.path.join(package, 'data', name)).st_mode & 0o777
             assert mode == 0o600, f'{name} is {oct(mode)}'
 
-    step('pytest')
-    run(sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', cwd=project)
-    for name,feature in [('.github/workflows/test.yml', 'github'), ('.gitlab-ci.yml', 'gitlab')]:
-        assert os.path.isfile(os.path.join(project, name)) == (feature in features), name
 
-    step('wheel')
-    # files made at run time must stay out of the wheel
-    for name in ('smoke.ini.local', 'smoke.log'):
-        open(os.path.join(package, 'data', name), 'w').close()
-    dist = os.path.join(project, 'dist')
-    run(sys.executable, '-m', 'pip', 'wheel', '--no-deps', '--no-build-isolation',
-        '-q', '-w', dist, project)
-    wheel = os.listdir(dist)
-    assert wheel == ['smoke-0.1.0-py3-none-any.whl'], wheel
-
-    # the package and its data files must be inside the wheel
-    with zipfile.ZipFile(os.path.join(dist, wheel[0])) as zf:
-        names = zf.namelist()
-    prefix = module.replace('.', '/')
-    expected = ['smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html']
-    if 'systemd' in features:
-        expected += ['systemd.py', 'data/systemd.service']
-    if 'nginx' in features:
-        expected += ['nginx.py', 'data/nginx.conf']
-    if 'sqlite' in features:
-        expected += ['db.py', 'models.py', 'handlers/messages.py']
-    if 'auth' in features:
-        expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
-    for name in expected:
-        assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
-    for name in ('data/smoke.ini.local', 'data/smoke.log', 'data/smoke.users', 'data/smoke.sessions', 'data/smoke.db'):
-        assert f'{prefix}/{name}' not in names, f'{prefix}/{name} is in the wheel'
+def check_run(module, env, project):
+    '''an app without web runs until it's stopped'''
+    step('run')
+    proc = subprocess.Popen([sys.executable, '-m', module], env=env, cwd=project,
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    for line in proc.stderr:
+        if 'Smoke is running' in line:
+            break
+    else:
+        raise AssertionError('the app did not start')
+    proc.terminate()
+    # SIGTERM stops it cleanly, on Windows terminate() kills it
+    code = proc.wait(10)
+    assert code == 0 or os.name != 'posix', code
 
 
 def main():
@@ -373,10 +418,14 @@ def main():
             return 1
     with tempfile.TemporaryDirectory() as tmp:
         check_options(tmp)
+        everything = ['auth', 'frontend', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd', 'web']
         for namespace,features,prefix in [
-                ('skunk', [], ''),
-                ('', [], ''),
-                ('skunk', ['auth', 'github', 'gitlab', 'nginx', 'sqlite', 'systemd'], '/app'),
+                ('skunk', DEFAULTS, ''),
+                ('', DEFAULTS, ''),
+                ('skunk', everything, '/app'),
+                # without a frontend, and without web at all
+                ('', ['auth', 'web'], ''),
+                ('skunk', ['github', 'sqlite', 'systemd'], ''),
                 ]:
             print(f'== namespace {namespace!r} features {features} prefix {prefix!r}', flush=True)
             check(tmp, namespace, features, prefix)

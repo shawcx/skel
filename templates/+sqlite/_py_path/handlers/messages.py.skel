@@ -1,3 +1,4 @@
+{% if 'web' in features %}
 
 import json
 
@@ -39,3 +40,4 @@ class Messages(Handler):
 
         self.set_status(201)
         self.write(message._as_dict())
+{% end %}

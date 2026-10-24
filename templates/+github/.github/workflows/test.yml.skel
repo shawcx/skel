@@ -19,6 +19,7 @@ jobs:
           python-version: ${{! matrix.python }}
       - run: python -m pip install '.[test]'
       - run: python -m pytest
+{% if 'frontend' in features %}
 
   frontend:
     runs-on: ubuntu-latest
@@ -28,3 +29,4 @@ jobs:
         with:
           node-version: 24
       - run: make -C src
+{% end %}

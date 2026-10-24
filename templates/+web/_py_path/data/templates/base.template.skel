@@ -6,7 +6,9 @@
   <meta name="description" content="{{ proper_name }}">
   <title>{{ proper_name }}</title>
   <link rel="icon"       type="image/x-icon" href="{{! static_url('favicon.ico', include_version=False) }}">
+{% if 'frontend' in features %}
   <link rel="stylesheet" type="text/css"     href="{{! static_url('css/{{ lower_name }}.css') }}" />
+{% end %}
 </head>
 <body data-prefix="{{! prefix }}">
 {%! set nav_home = "" %}

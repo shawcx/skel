@@ -10,7 +10,9 @@ readme          = "README.md"
 requires-python = ">=3.10"
 dynamic         = ["version"]
 dependencies    = [
+{% if 'web' in features %}
     "tornado>=6.4",
+{% end %}
 {% if 'sqlite' in features %}
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.20",
