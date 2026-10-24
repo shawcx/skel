@@ -4,10 +4,11 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend.
 
 ## Usage
 
-    ./skel.py [--namespace <namespace>] [--output <directory>] [--force] [-V] <Project>
+    ./skel.py [--namespace <namespace>] [--output <directory>] [--with <feature>,...] [--force] [-V] <Project>
 
     make run NAME=Slog NS=skunk     # same as ./skel.py --force --namespace skunk Slog
-    make test                       # generate a project into a temp directory and check it works
+    make run WITH=systemd           # also passes --with systemd
+    make test                       # generate projects into a temp directory and check they work
 
 Projects are created in `projects/<project>` unless `--output` is given. An existing
 project is only overwritten with `--force`. Requires Python 3.10+ and `tornado`.
@@ -40,3 +41,21 @@ Everything under `templates/` is copied into the new project:
 | `py_name`     | `skunk.slog`                    |
 
 The same keys, plus the `values.txt` keys, are available inside `.skel` templates.
+
+A line holding only a `{% %}` tag is removed along with the tag, so blocks don't
+leave blank lines in the output.
+
+## Features
+
+Optional features are added with `--with`. Each feature is a `templates/+<feature>/`
+directory, laid out like `templates/`, whose files are added to the project. A feature
+can't replace a file that `templates/` or another feature creates. Shared templates
+check the sorted `features` list instead:
+
+    {% if 'systemd' in features %}
+    from . import systemd
+    {% end %}
+
+| Feature   | Adds                                                              |
+|-----------|-------------------------------------------------------------------|
+| `systemd` | `--systemd [<user>]`, which writes a systemd service for the app |

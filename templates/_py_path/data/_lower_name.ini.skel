@@ -10,3 +10,10 @@ port    = 8080
 
 # keep sessions valid across restarts, otherwise a random secret is generated
 #cookie_secret =
+{% if 'systemd' in features %}
+
+# settings for --systemd, any {name} in systemd.service can be set here
+[systemd]
+#path = /etc/systemd/system/{{ lower_name }}.service
+#user = {{ lower_name }}
+{% end %}

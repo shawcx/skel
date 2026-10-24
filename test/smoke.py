@@ -55,13 +55,24 @@ async def check_websockets(port):
         raise AssertionError('cross-origin WebSocket was accepted')
 
 
-def check(tmp, namespace):
-    project = os.path.join(tmp, namespace or 'none', 'smoke')
+def check_options(tmp):
+    step('unknown feature')
+    project = os.path.join(tmp, 'unknown')
+    rc = subprocess.run([sys.executable, os.path.join(ROOT, 'skel.py'),
+        '--with', 'nope', '--output', project, 'Smoke'], capture_output=True).returncode
+    assert rc == 2, f'unknown feature exited with {rc}'
+    assert not os.path.exists(project), project
+
+
+def check(tmp, namespace, features):
+    project = os.path.join(tmp, '-'.join([namespace or 'none', *features]), 'smoke')
     module  = f'{namespace}.smoke' if namespace else 'smoke'
     package = os.path.join(project, *module.split('.'))
     env = dict(os.environ, PYTHONPATH=project)
 
     args = ['--namespace', namespace] if namespace else []
+    if features:
+        args += ['--with', ','.join(features)]
 
     step('generate')
     run(sys.executable, os.path.join(ROOT, 'skel.py'), *args, '--output', project, 'Smoke')
@@ -89,6 +100,25 @@ def check(tmp, namespace):
     out = subprocess.run([sys.executable, '-m', module, '--version'],
         env=env, check=True, capture_output=True, text=True).stdout
     assert '0.1.0' in out, out
+
+    step('systemd')
+    if 'systemd' in features:
+        # write the service into the project instead of /etc
+        ini = os.path.join(project, 'systemd.ini')
+        service = os.path.join(project, 'smoke.service')
+        with open(ini, 'w') as fp:
+            fp.write(f'[systemd]\npath = {service}\n')
+        run(sys.executable, '-m', module, '--ini', ini, '--systemd', 'nobody', env=env, cwd=project)
+        with open(service) as fp:
+            conf = dict(line.split('=', 1) for line in fp.read().splitlines() if '=' in line)
+        assert conf['User'] == 'nobody', conf
+        assert f'-m {module} --ini' in conf['ExecStart'], conf
+        assert os.path.samefile(conf['WorkingDirectory'], project), conf
+    else:
+        assert not os.path.exists(os.path.join(package, 'systemd.py'))
+        rc = subprocess.run([sys.executable, '-m', module, '--systemd'],
+            env=env, capture_output=True).returncode
+        assert rc == 2, f'--systemd without the feature exited with {rc}'
 
     step('serve')
     port = free_port()
@@ -125,15 +155,19 @@ def check(tmp, namespace):
     with zipfile.ZipFile(os.path.join(dist, wheel[0])) as zf:
         names = zf.namelist()
     prefix = module.replace('.', '/')
-    for name in ('smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html'):
+    expected = ['smoke.py', 'data/smoke.ini', 'data/static/favicon.ico', 'data/templates/index.html']
+    if 'systemd' in features:
+        expected += ['systemd.py', 'data/systemd.service']
+    for name in expected:
         assert f'{prefix}/{name}' in names, f'{prefix}/{name} missing from wheel'
 
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        for namespace in ('skunk', ''):
-            print(f'== namespace {namespace!r}', flush=True)
-            check(tmp, namespace)
+        check_options(tmp)
+        for namespace,features in [('skunk', []), ('', []), ('skunk', ['systemd'])]:
+            print(f'== namespace {namespace!r} features {features}', flush=True)
+            check(tmp, namespace, features)
 
     print('ok')
     return 0

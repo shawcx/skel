@@ -11,6 +11,18 @@ from jsxn import jsxn
 import tornado.template
 
 
+# resolve everything relative to this script, not the current directory
+ROOT      = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES = os.path.join(ROOT, 'templates')
+
+# optional features are templates/+<feature> directories
+FEATURES = sorted(name[1:] for name in os.listdir(TEMPLATES)
+    if name.startswith('+') and os.path.isdir(os.path.join(TEMPLATES, name)))
+
+# a {% %} tag alone on a line, but not an escaped {%! %}
+TAG_LINE = re.compile(r'^[ \t]*(\{%(?!!)(?:(?!%\}).)*%\})[ \t]*\r?\n', re.M)
+
+
 argparser = argparse.ArgumentParser()
 
 argparser.add_argument('project',
@@ -24,6 +36,10 @@ argparser.add_argument('--namespace',
 argparser.add_argument('--output', '-o',
     metavar='<directory>',
     help='directory to create the project in, defaults to projects/<project>')
+
+argparser.add_argument('--with',
+    metavar='<feature>', dest='features', action='append', default=[],
+    help=f'add optional features, comma separated or repeated: {", ".join(FEATURES)}')
 
 argparser.add_argument('--force',
     action='store_true',
@@ -56,13 +72,26 @@ def display(path):
     return path if rel.startswith('..') else rel
 
 
+class Loader(tornado.template.Loader):
+    '''remove a {% %} tag's line along with the tag, so blocks such as
+       {% if %} ... {% end %} don't leave blank lines in the output'''
+    def _create_template(self, name):
+        with open(os.path.join(self.root, name), 'rb') as fp:
+            text = fp.read().decode('utf-8')
+        return tornado.template.Template(TAG_LINE.sub(r'\1', text), name=name, loader=self)
+
+
 class Skel:
     def __init__(self):
-        # resolve everything relative to this script, not the current directory
-        self.root = os.path.dirname(os.path.abspath(__file__))
-        self.templates = os.path.join(self.root, 'templates')
+        self.root = ROOT
+        self.templates = TEMPLATES
 
         self.args = argparser.parse_args()
+
+        self.features = sorted(set(f for arg in self.args.features for f in arg.split(',') if f))
+        for feature in self.features:
+            if feature not in FEATURES:
+                argparser.error(f'unknown feature: {feature}, choose from {", ".join(FEATURES)}')
 
         self.project = jsxn.Project()
         # optional values from values.txt default to empty
@@ -119,6 +148,17 @@ class Skel:
             path = path[:-5]
         return os.path.join(self.output, os.path.normpath(path))
 
+    def sources(self):
+        '''yield the template path and output path of every file to create'''
+        for top in [self.templates] + [os.path.join(self.templates, '+' + f) for f in self.features]:
+            for (base,directories,filenames) in os.walk(top):
+                if base == self.templates:
+                    # features are only added when selected
+                    directories[:] = [d for d in directories if not d.startswith('+')]
+                for filename in filenames:
+                    src = os.path.join(base, filename)
+                    yield os.path.relpath(src, self.templates), self.destination(os.path.relpath(src, top))
+
     @classmethod
     def main(cls):
         self = cls()
@@ -127,28 +167,31 @@ class Skel:
             print(f'{self.output} already exists, use --force to overwrite', file=sys.stderr)
             return 1
 
-        loader = tornado.template.Loader(self.templates, autoescape=None)
+        # a feature adds files, it can't replace one from the base or another feature
+        sources = {}
+        for path,dest in self.sources():
+            if dest in sources:
+                print(f'{path}: {sources[dest]} already creates {display(dest)}', file=sys.stderr)
+                return 1
+            sources[dest] = path
 
-        for (base,directories,filenames) in os.walk(self.templates):
-            for filename in filenames:
-                src  = os.path.join(base, filename)
-                path = os.path.relpath(src, self.templates)
-                dest = self.destination(path)
+        loader = Loader(self.templates, autoescape=None)
 
-                try:
-                    os.makedirs(os.path.dirname(dest), exist_ok=True)
-                    if filename.endswith('.skel'):
-                        content = loader.load(path).generate(**dict(self.project))
-                        with open(dest, 'wb') as fp:
-                            fp.write(content)
-                    else:
-                        shutil.copy(src, dest)
-                except Exception as e:
-                    print(f'{path}: {e}', file=sys.stderr)
-                    return 1
+        for dest,path in sources.items():
+            try:
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                if path.endswith('.skel'):
+                    content = loader.load(path).generate(features=self.features, **dict(self.project))
+                    with open(dest, 'wb') as fp:
+                        fp.write(content)
+                else:
+                    shutil.copy(os.path.join(self.templates, path), dest)
+            except Exception as e:
+                print(f'{path}: {e}', file=sys.stderr)
+                return 1
 
-                if self.args.verbose:
-                    print(path, '=>', display(dest))
+            if self.args.verbose:
+                print(path, '=>', display(dest))
 
         print(f'Created {display(self.output)}')
         return 0

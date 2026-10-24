@@ -1,0 +1,68 @@
+
+import logging
+import os
+import shlex
+import sys
+
+import {{ py_name }}
+
+
+def arguments():
+    {{ py_name }}.argparser.add_argument('--systemd',
+        metavar='<user>', default=0, nargs='?',
+        help='Install a systemd service that runs as <user>, then exit')
+
+
+def command():
+    '''the command that starts this app again: python -m package when it was
+       run that way, which has no runnable script, otherwise the script'''
+    spec = getattr(sys.modules.get('__main__'), '__spec__', None)
+    if spec is not None and spec.name:
+        cmd = [sys.executable, '-m', spec.name.removesuffix('.__main__')]
+    else:
+        cmd = [sys.executable, os.path.abspath(sys.argv[0])]
+    # keep an extra ini file given on the command line
+    if {{ py_name }}.args.ini:
+        cmd += ['--ini', os.path.abspath({{ py_name }}.args.ini)]
+    return shlex.join(cmd)
+
+
+def install():
+    '''write the service file if --systemd was given, returns True if it was'''
+    # --systemd without a user is None, leaving it out is 0
+    if {{ py_name }}.args.systemd == 0:
+        return False
+
+    params = dict(
+        description = '{{ proper_name }}',
+        # run as the user who called sudo rather than root
+        user        = os.environ.get('SUDO_USER') or os.environ.get('USER', 'nobody'),
+        cwd         = os.getcwd(),
+        cmdline     = command(),
+        path        = '/etc/systemd/system/{{ lower_name }}.service',
+        )
+
+    # any of the params can be set in the [systemd] section of the ini file
+    if {{ py_name }}.config.has_section('systemd'):
+        params.update({{ py_name }}.config['systemd'])
+
+    if {{ py_name }}.args.systemd:
+        params['user'] = {{ py_name }}.args.systemd
+
+    with open({{ py_name }}.data('systemd.service'), 'r') as fp:
+        conf = fp.read()
+
+    try:
+        conf = conf.format(**params)
+    except KeyError as e:
+        raise {{ py_name }}.error('Missing systemd parameter: %s', e) from None
+
+    try:
+        with open(params['path'], 'w') as fp:
+            fp.write(conf)
+    except OSError as e:
+        raise {{ py_name }}.error('Could not write systemd service: %s', e) from None
+
+    logging.info('Installed systemd service: %s', params['path'])
+    logging.info('Start it with: systemctl daemon-reload && systemctl enable --now {{ lower_name }}')
+    return True

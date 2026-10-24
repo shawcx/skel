@@ -15,6 +15,9 @@ import {{ py_name }}
 
 from . import settings
 from . import handlers
+{% if 'systemd' in features %}
+from . import systemd
+{% end %}
 
 
 class {{ proper_name }}(tornado.web.Application):
@@ -48,10 +51,19 @@ class {{ proper_name }}(tornado.web.Application):
             metavar='<port>',
             type=int,
             help='Port to listen on')
+{% if 'systemd' in features %}
+
+        systemd.arguments()
+{% end %}
 
         try:
             await {{ py_name }}.settings.load()
             await self.logging()
+{% if 'systemd' in features %}
+            # install the service instead of running
+            if systemd.install():
+                self.stop()
+{% end %}
         except {{ py_name }}.error as e:
             if {{ py_name }}.args.debug:
                 traceback.print_tb(e.__traceback__)

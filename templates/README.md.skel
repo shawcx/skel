@@ -15,3 +15,17 @@ Settings are read from the `[{{ lower_name }}]` section of these ini files, in o
 - `/etc/{{ namespace or lower_name }}/{{ lower_name }}.ini`
 - `~/.{{ lower_name }}.ini`
 - any file passed with `--ini`
+{% if 'systemd' in features %}
+
+## systemd
+
+Install a service that runs the app from the current directory, then start it:
+
+    sudo python3 -m {{ py_name }} --systemd [<user>]
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now {{ lower_name }}
+
+The service runs as `<user>`, or the user who ran `sudo`, with the same Python and
+`--ini` file. Settings in the `[systemd]` section of the ini file fill in
+`{{ py_path }}/data/systemd.service`.
+{% end %}
