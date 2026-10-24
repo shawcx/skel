@@ -1,7 +1,11 @@
 import asyncio
+import base64
+import datetime
 import inspect
+import json
 import logging
 import os
+import uuid
 
 import {{ py_name }}
 
@@ -32,6 +36,29 @@ class Paths:
 
     def __str__(self):
         return self()
+
+
+class JSONEncoder(json.JSONEncoder):
+    '''encodes bytes, UUIDs, dates and times, and objects with an _as_dict()
+       method; pass it explicitly or use json_encode, the json module is untouched'''
+    def default(self, obj):
+        if hasattr(obj, '_as_dict'):
+            return obj._as_dict()
+        if isinstance(obj, bytes):
+            return base64.b64encode(obj).decode('ascii')
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        # ISO 8601, which covers datetime too as it's a date
+        if isinstance(obj, (datetime.date, datetime.time)):
+            return obj.isoformat()
+        if isinstance(obj, datetime.timedelta):
+            return obj.total_seconds()
+        return json.JSONEncoder.default(self, obj)
+
+
+def json_encode(obj, **kwds):
+    '''json.dumps with JSONEncoder'''
+    return json.dumps(obj, cls=JSONEncoder, **kwds)
 
 
 async def wait(result):

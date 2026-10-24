@@ -3,8 +3,10 @@ import tornado.web
 
 import {{ py_name }}
 
+from .base import Handler
 
-class Template(tornado.web.RequestHandler):
+
+class Template(Handler):
     def initialize(self, template='index', **kwds):
         self.kwds = kwds
         self.template = template + '.html'

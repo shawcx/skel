@@ -159,6 +159,22 @@ def check(tmp, namespace, features):
         env=env, check=True, capture_output=True, text=True).stdout
     assert '0.1.0' in out, out
 
+    step('json')
+    code = (f'import datetime, uuid, {module}; print({module}.json_encode(dict(b=b"hi", '
+        'u=uuid.UUID(int=1), d=datetime.date(2026, 1, 2), t=datetime.timedelta(seconds=90))))')
+    out = subprocess.run([sys.executable, '-c', code],
+        env=env, check=True, capture_output=True, text=True).stdout
+    assert out.strip() == ('{"b": "aGk=", "u": "00000000-0000-0000-0000-000000000001", '
+        '"d": "2026-01-02", "t": 90.0}'), out
+
+    step('errors')
+    bad = os.path.join(project, 'bad.ini')
+    with open(bad, 'w') as fp:
+        fp.write('not an ini file\n')
+    rsp = subprocess.run([sys.executable, '-m', module, '--ini', bad],
+        env=env, capture_output=True, text=True)
+    assert rsp.returncode == 1 and 'Unable to parse' in rsp.stderr, rsp
+
     step('systemd')
     if 'systemd' in features:
         # write the service into the project instead of /etc

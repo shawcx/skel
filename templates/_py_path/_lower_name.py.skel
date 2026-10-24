@@ -29,6 +29,7 @@ from . import systemd
 class {{ proper_name }}(tornado.web.Application):
     @classmethod
     def main(cls):
+        '''run the application, returns the exit code'''
         {{ py_name }}.application = self = cls()
         try:
             asyncio.run(self._async_main())
@@ -36,6 +37,8 @@ class {{ proper_name }}(tornado.web.Application):
             if {{ py_name }}.args.debug:
                 traceback.print_tb(e.__traceback__)
             logging.error('%s', e)
+            return 1
+        return 0
 
     async def _async_main(self):
         self.loop = asyncio.get_running_loop()
@@ -64,30 +67,23 @@ class {{ proper_name }}(tornado.web.Application):
         systemd.arguments()
 {% end %}
 
-        try:
-            await {{ py_name }}.settings.load()
-            await self.logging()
+        # errors go up to main, which logs them and exits with 1
+        await {{ py_name }}.settings.load()
+        await self.logging()
 {% if 'systemd' in features %}
-            # install the service instead of running
-            if systemd.install():
-                self.stop()
+
+        # install the service instead of running
+        if systemd.install():
+            return
 {% end %}
 {% if 'auth' in features %}
-            # add a user instead of running
-            if auth.add_user():
-                self.stop()
-{% end %}
-        except {{ py_name }}.error as e:
-            if {{ py_name }}.args.debug:
-                traceback.print_tb(e.__traceback__)
-            logging.error('%s', e)
-            self.stop()
 
-        if not self._stop_event.is_set():
-            try:
-                await self._async_init()
-            except {{ py_name }}.error as e:
-                logging.error('%s', e)
+        # add a user instead of running
+        if auth.add_user():
+            return
+{% end %}
+
+        await self._async_init()
 
     async def _async_init(self, **kwds):
 {% if 'auth' in features %}

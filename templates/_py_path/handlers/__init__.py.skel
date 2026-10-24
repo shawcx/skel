@@ -1,4 +1,5 @@
 
+from .base       import Handler
 {% if 'auth' in features %}
 from .templates  import Template,Protected
 from .websockets import WebSocket,ProtectedSocket

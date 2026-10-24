@@ -1,0 +1,15 @@
+
+import tornado.web
+
+import {{ py_name }}
+
+
+class Handler(tornado.web.RequestHandler):
+    '''writes dicts and lists as JSON with {{ py_name }}.JSONEncoder, so bytes,
+       UUIDs and datetimes can be written directly'''
+    def write(self, chunk):
+        if isinstance(chunk, (dict, list)):
+            self.set_header('Content-Type', 'application/json; charset=UTF-8')
+            # like tornado, escape </ so the JSON is safe inside a script tag
+            chunk = {{ py_name }}.json_encode(chunk).replace('</', '<\\/')
+        super().write(chunk)
