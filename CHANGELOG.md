@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-24)
+
+PostgreSQL, database migrations, a lighter frontend with live messages, and `--update`
+from an installed skel.
 
 - `--with postgres`: PostgreSQL through async SQLAlchemy and asyncpg, with the password in
   a `password_file`, and with `docker` a `db` service that the app waits for. Its tests
