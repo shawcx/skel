@@ -1,0 +1,3 @@
+# LF on every OS, so the templates make the same files everywhere and skel --update
+# merges renders of the templates in git with renders of the ones checked out
+* text=auto eol=lf
