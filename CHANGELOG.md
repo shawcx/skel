@@ -19,6 +19,9 @@
 - The frontend no longer uses jQuery, Backbone or Underscore. The app is an `EventTarget`,
   the server's add, update and delete messages change a `Collection`, and the scripts are
   ES modules. The bundle is 84 KB instead of 217 KB.
+- With `sqlite` or `postgres`, posting to `/api/messages` sends the message to every
+  WebSocket, and with the frontend the index page has a Messages card that lists them and
+  shows new ones as they're posted.
 
 ## 0.1.0 (2026-10-24)
 

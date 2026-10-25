@@ -134,6 +134,25 @@ async def check_page(profile, port):
     await receive({'action':'delete', 'collection':'notes', 'id':1}, 'app.collections.notes.size == 0')
     sender.close()
 
+    # the messages card posts its form, and lists messages posted elsewhere as they arrive
+    items = "[...document.querySelectorAll('#messages li')].map(li => li.textContent)"
+    async def until(expression):
+        for _ in range(50):
+            if await cdp.evaluate(expression):
+                return
+            await asyncio.sleep(0.1)
+        raise AssertionError(f'{expression} is {await cdp.evaluate(items)}')
+    await cdp.evaluate('''let form = document.querySelector('#messages form')
+        form.elements.text.value = '<b>from the page</b>'
+        form.requestSubmit()''')
+    await until(f"JSON.stringify({items}) == '[\"<b>from the page</b>\"]'")
+    assert await cdp.evaluate("document.querySelector('#messages b') == null"), 'the text became HTML'
+    assert await cdp.evaluate("document.querySelector('#messages input').value == ''"), 'the form was not reset'
+    request = urllib.request.Request(f'http://127.0.0.1:{port}{PREFIX}/api/messages', method='POST',
+        data=json.dumps({'text':'from elsewhere'}).encode())
+    urllib.request.urlopen(request).close()
+    await until(f"JSON.stringify({items}) == '[\"<b>from the page</b>\",\"from elsewhere\"]'")
+
     # the stylesheet applies and the icon font loads from the webfonts directory
     margin = await cdp.evaluate('getComputedStyle(document.body).marginTop')
     assert margin == '80px', margin
@@ -156,7 +175,7 @@ def main():
         env = dict(os.environ, PYTHONPATH=project)
 
         step('generate')
-        run(sys.executable, os.path.join(ROOT, 'skel.py'), '--output', project, 'Front')
+        run(sys.executable, os.path.join(ROOT, 'skel.py'), '--with', 'sqlite', '--output', project, 'Front')
         with open(os.path.join(package, 'data', 'front.ini.local'), 'w') as fp:
             fp.write(f'[front]\nprefix = {PREFIX}\n')
 

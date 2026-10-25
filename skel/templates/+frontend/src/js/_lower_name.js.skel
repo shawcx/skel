@@ -1,6 +1,9 @@
 import * as bootstrap from 'bootstrap'
 
 import Collection from './collection.js'
+{% if 'db' in features %}
+import messages from './messages.js'
+{% end %}
 import Socket from './socket.js'
 
 // for scripts in the page, as Bootstrap's own bundle does
@@ -64,6 +67,11 @@ class {{ proper_name }} extends EventTarget {
 
 // the script is at the end of the body, so the page is there already
 window.app = new {{ proper_name }}()
+{% if 'db' in features %}
+let card = document.getElementById('messages')
+app.start(card ? [messages(app, card)] : [])
+{% else %}
 app.start()
+{% end %}
 
 export default {{ proper_name }}

@@ -48,13 +48,15 @@ def test_json_encode():
 {% if 'web' in features %}
 
 
+def open_socket(app, headers={}):
+    request = tornado.httpclient.HTTPRequest(app.url('/ws', 'ws'), headers=headers)
+    return tornado.websocket.websocket_connect(request)
+
+
 async def relay(app, headers={}):
     '''send a message on one WebSocket and return what another one receives'''
-    def connect():
-        request = tornado.httpclient.HTTPRequest(app.url('/ws', 'ws'), headers=headers)
-        return tornado.websocket.websocket_connect(request)
-    a = await connect()
-    b = await connect()
+    a = await open_socket(app, headers)
+    b = await open_socket(app, headers)
     await a.write_message(json.dumps({'action':'test'}))
     return json.loads(await asyncio.wait_for(b.read_message(), 5))
 {% end %}
@@ -201,14 +203,19 @@ def test_messages(app):
         await browser.get('/login')
         await browser.post('/login', username='alice', password='secret')
         fetch = browser.fetch
+        socket = await open_socket(app, {'Cookie':f'session_id={browser.cookies["session_id"]}'})
 {% else %}
         client = tornado.httpclient.AsyncHTTPClient()
         def fetch(path, **kwds):
             return client.fetch(app.url(path), raise_error=False, **kwds)
+        socket = await open_socket(app)
 {% end %}
 
         rsp = await fetch('/api/messages', method='POST', body=json.dumps({'text':'hi'}))
         assert rsp.code == 201 and json.loads(rsp.body)['text'] == 'hi', rsp
+        # pages hear about it on the WebSocket
+        sent = json.loads(await asyncio.wait_for(socket.read_message(), 5))
+        assert sent == {'action':'add', 'collection':'messages', 'data':json.loads(rsp.body)}, sent
         rsp = await fetch('/api/messages', method='POST', body='{}')
         assert rsp.code == 400, rsp
 

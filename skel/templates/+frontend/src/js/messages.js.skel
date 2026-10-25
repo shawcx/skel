@@ -1,0 +1,42 @@
+{% if 'db' in features %}
+// the messages card on the index page: it lists /api/messages, adds the ones the server
+// sends on the WebSocket as they're posted, and posts its form
+export default function messages(app, card) {
+    let url        = `${document.body.dataset.prefix || ''}/api/messages`
+    let list       = card.querySelector('ul')
+    let form       = card.querySelector('form')
+    let collection = app.collection('messages')
+
+    collection.addEventListener('add', (event) => {
+        let message = event.detail
+        let item = document.createElement('li')
+        item.className  = 'list-group-item'
+        item.dataset.id = message.id
+        // textContent, so the text is never HTML
+        item.textContent = message.text
+        // in order, as the WebSocket can send a message before the list arrives
+        let after = [...list.children].find((li) => Number(li.dataset.id) > message.id)
+        list.insertBefore(item, after || null)
+    })
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        let rsp = await fetch(url, {
+            method  : 'POST',
+            headers : {'Content-Type': 'application/json'},
+            body    : JSON.stringify({text: form.elements.text.value}),
+        })
+        if (!rsp.ok) {
+            console.error('Could not post the message:', rsp.status, await rsp.text())
+            return
+        }
+        // the WebSocket sends it too, the collection only adds it once
+        collection.add(await rsp.json())
+        form.reset()
+    })
+
+    return fetch(url)
+        .then((rsp) => rsp.json())
+        .then(({data}) => data.forEach((message) => collection.add(message)))
+}
+{% end %}

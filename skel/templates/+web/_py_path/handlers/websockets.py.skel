@@ -41,6 +41,15 @@ class WebSocket(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         self.websockets.pop(id(self), None)
+
+    @classmethod
+    def broadcast(cls, message):
+        '''send a message to every open WebSocket, as with write_message'''
+        for ws in list(cls.websockets.values()):
+            try:
+                ws.write_message(message)
+            except tornado.websocket.WebSocketClosedError:
+                pass
 {% if 'auth' in features %}
 
 

@@ -98,7 +98,11 @@ database with:
 {% if 'web' in features %}
 
 `/api/messages` is an example: GET lists the messages as JSON, and POST adds one from a body
-like `{"text": "hi"}`.
+like `{"text": "hi"}`, then sends it to every WebSocket as
+`{"action": "add", "collection": "messages", "data": {...}}`.
+{% if 'frontend' in features %}
+The Messages card on the index page lists them, and adds new ones as they're posted.
+{% end %}
 {% end %}
 {% if 'postgres' in features %}
 

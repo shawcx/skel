@@ -7,12 +7,14 @@ import sqlalchemy
 import {{ py_name }}
 
 from .base import Handler
+from .websockets import WebSocket
 from .. import db
 from ..models import Message
 
 
 class Messages(Handler):
-    '''GET lists the messages, POST adds one from a JSON body like {"text": "hi"}'''
+    '''GET lists the messages, POST adds one from a JSON body like {"text": "hi"}
+       and sends it to every WebSocket'''
 {% if 'auth' in features %}
 
     async def prepare(self):
@@ -37,6 +39,9 @@ class Messages(Handler):
         async with db.session() as session, session.begin():
             message = Message(text=text)
             session.add(message)
+
+        # pages add it to their list as it arrives on the WebSocket
+        WebSocket.broadcast({'action':'add', 'collection':'messages', 'data':message})
 
         self.set_status(201)
         self.write(message._as_dict())

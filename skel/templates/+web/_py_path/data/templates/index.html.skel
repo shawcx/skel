@@ -21,4 +21,16 @@
 {% end %}
     </h2>
   </div>
+{% if 'db' in features and 'frontend' in features %}
+  <div class="card" id="messages">
+    <h5 class="card-header">Messages</h5>
+    <ul class="list-group list-group-flush"></ul>
+    <div class="card-body">
+      <form class="d-flex gap-2">
+        <input type="text" class="form-control" name="text" placeholder="Say something" autocomplete="off" required>
+        <button type="submit" class="btn btn-primary">Send</button>
+      </form>
+    </div>
+  </div>
+{% end %}
 {%! end %}
