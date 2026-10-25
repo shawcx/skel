@@ -1,39 +1,109 @@
 {% if 'db' in features %}
-// the messages card on the index page: it lists /api/messages, adds the ones the server
-// sends on the WebSocket as they're posted, and posts its form
+// the messages card on the index page: it lists /api/messages, and posts, edits and
+// deletes messages, while the WebSocket brings the changes made anywhere else
 export default function messages(app, card) {
     let url        = `${document.body.dataset.prefix || ''}/api/messages`
     let list       = card.querySelector('ul')
     let form       = card.querySelector('form')
+    let template   = card.querySelector('template')
     let collection = app.collection('messages')
+
+    let id   = (element) => Number(element.closest('li').dataset.id)
+    let text = (message) => list.querySelector(`li[data-id="${message.id}"] .text`)
 
     collection.addEventListener('add', (event) => {
         let message = event.detail
-        let item = document.createElement('li')
-        item.className  = 'list-group-item'
+        let item = template.content.firstElementChild.cloneNode(true)
         item.dataset.id = message.id
         // textContent, so the text is never HTML
-        item.textContent = message.text
+        item.querySelector('.text').textContent = message.text
         // in order, as the WebSocket can send a message before the list arrives
         let after = [...list.children].find((li) => Number(li.dataset.id) > message.id)
         list.insertBefore(item, after || null)
     })
 
+    collection.addEventListener('change', (event) => {
+        let element = text(event.detail)
+        // Escape puts back the newest text, when someone else changed it meanwhile
+        if (!element.isContentEditable) {
+            element.textContent = event.detail.text
+        }
+    })
+
+    collection.addEventListener('remove', (event) => {
+        text(event.detail).closest('li').remove()
+    })
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault()
-        let rsp = await fetch(url, {
-            method  : 'POST',
-            headers : {'Content-Type': 'application/json'},
-            body    : JSON.stringify({text: form.elements.text.value}),
-        })
-        if (!rsp.ok) {
-            console.error('Could not post the message:', rsp.status, await rsp.text())
+        let message = await send(url, 'POST', {text: form.elements.text.value})
+        if (message) {
+            // the WebSocket sends it too, the collection only adds it once
+            collection.add(message)
+            form.reset()
+        }
+    })
+
+    list.addEventListener('click', async (event) => {
+        let button = event.target.closest('button')
+        if (!button) {
             return
         }
-        // the WebSocket sends it too, the collection only adds it once
-        collection.add(await rsp.json())
-        form.reset()
+        if (button.dataset.action == 'delete') {
+            let message = collection.get(id(button))
+            if (await send(`${url}/${message.id}`, 'DELETE')) {
+                collection.remove(message.id)
+            }
+        } else if (button.dataset.action == 'edit') {
+            let element = text(collection.get(id(button)))
+            element.contentEditable = 'plaintext-only'
+            element.focus()
+            getSelection().selectAllChildren(element)
+        }
     })
+
+    // while editing, Enter saves the text, and Escape or clicking elsewhere puts it back
+    list.addEventListener('keydown', async (event) => {
+        let element = event.target
+        if (!element.isContentEditable || !['Enter', 'Escape'].includes(event.key)) {
+            return
+        }
+        event.preventDefault()
+        let message = collection.get(id(element))
+        let edited  = element.textContent
+        stop(element)
+        if (event.key == 'Enter' && edited != message.text) {
+            // shown until the change arrives, or put back if it fails
+            element.textContent = edited
+            let changed = await send(`${url}/${message.id}`, 'PUT', {text: edited})
+            changed ? collection.update(changed) : stop(element)
+        }
+    })
+
+    list.addEventListener('focusout', (event) => {
+        if (event.target.isContentEditable) {
+            stop(event.target)
+        }
+    })
+
+    function stop(element) {
+        element.contentEditable = 'false'
+        element.textContent = collection.get(id(element)).text
+    }
+
+    // the reply's JSON, or null after logging why the request failed
+    async function send(path, method, body) {
+        let rsp = await fetch(path, {
+            method,
+            headers : {'Content-Type': 'application/json'},
+            body    : body && JSON.stringify(body),
+        })
+        if (!rsp.ok) {
+            console.error(`Could not ${method} ${path}:`, rsp.status, await rsp.text())
+            return null
+        }
+        return rsp.status == 204 ? {} : rsp.json()
+    }
 
     return fetch(url)
         .then((rsp) => rsp.json())

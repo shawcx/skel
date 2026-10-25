@@ -9,5 +9,5 @@ from .templates  import Template
 from .websockets import WebSocket
 {% end %}
 {% if 'db' in features %}
-from .messages   import Messages
+from .messages   import Messages,OneMessage
 {% end %}

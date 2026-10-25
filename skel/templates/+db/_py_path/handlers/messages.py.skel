@@ -12,9 +12,9 @@ from .. import db
 from ..models import Message
 
 
-class Messages(Handler):
-    '''GET lists the messages, POST adds one from a JSON body like {"text": "hi"}
-       and sends it to every WebSocket'''
+class MessageHandler(Handler):
+    '''what the /api/messages handlers share: every change is sent to every WebSocket,
+       so pages keep their list up to date'''
 {% if 'auth' in features %}
 
     async def prepare(self):
@@ -23,26 +23,66 @@ class Messages(Handler):
             raise {{ py_name }}.HTTPError(403)
 {% end %}
 
-    async def get(self):
-        async with db.session() as session:
-            messages = await session.scalars(sqlalchemy.select(Message).order_by(Message.id))
-            self.write({'data':messages.all()})
-
-    async def post(self):
+    def text(self):
+        '''the text from a JSON body like {"text": "hi"}'''
         try:
             text = json.loads(self.request.body)['text']
             if not isinstance(text, str):
                 raise TypeError(text)
         except (ValueError,KeyError,TypeError):
             raise {{ py_name }}.HTTPError(400, 'expected {"text": "..."}') from None
+        return text
 
+    def broadcast(self, action, **msg):
+        WebSocket.broadcast({'action':action, 'collection':'messages', **msg})
+
+
+class Messages(MessageHandler):
+    '''GET lists the messages, POST adds one'''
+
+    async def get(self):
+        async with db.session() as session:
+            messages = await session.scalars(sqlalchemy.select(Message).order_by(Message.id))
+            self.write({'data':messages.all()})
+
+    async def post(self):
+        text = self.text()
         async with db.session() as session, session.begin():
             message = Message(text=text)
             session.add(message)
 
-        # pages add it to their list as it arrives on the WebSocket
-        WebSocket.broadcast({'action':'add', 'collection':'messages', 'data':message})
-
+        self.broadcast('add', data=message)
         self.set_status(201)
         self.write(message._as_dict())
+
+
+class OneMessage(MessageHandler):
+    '''/api/messages/<id>: GET gets the message, PUT changes its text, DELETE removes it'''
+
+    async def get(self, id):
+        async with db.session() as session:
+            message = await self.find(session, id)
+        self.write(message._as_dict())
+
+    async def put(self, id):
+        text = self.text()
+        async with db.session() as session, session.begin():
+            message = await self.find(session, id)
+            message.text = text
+
+        self.broadcast('update', data=message)
+        self.write(message._as_dict())
+
+    async def delete(self, id):
+        async with db.session() as session, session.begin():
+            await session.delete(await self.find(session, id))
+
+        self.broadcast('delete', id=int(id))
+        self.set_status(204)
+
+    async def find(self, session, id):
+        message = await session.get(Message, int(id))
+        if message is None:
+            raise {{ py_name }}.HTTPError(404, 'no message %s', id)
+        return message
 {% end %}

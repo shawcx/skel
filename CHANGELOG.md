@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `/api/messages/<id>` gets, changes (PUT) and deletes a message, and sends each change to
+  every WebSocket. The Messages card has edit and delete buttons, a message is edited in
+  place, where Enter saves and Escape cancels, and changes made elsewhere show as they happen.
+
 ## 0.2.0 (2026-10-24)
 
 PostgreSQL, database migrations, a lighter frontend with live messages, and `--update`

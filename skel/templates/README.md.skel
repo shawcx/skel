@@ -98,10 +98,13 @@ database with:
 {% if 'web' in features %}
 
 `/api/messages` is an example: GET lists the messages as JSON, and POST adds one from a body
-like `{"text": "hi"}`, then sends it to every WebSocket as
-`{"action": "add", "collection": "messages", "data": {...}}`.
+like `{"text": "hi"}`. On `/api/messages/<id>`, GET gets a message, PUT changes its text with
+the same body, and DELETE removes it. Each change goes to every WebSocket, like
+`{"action": "add", "collection": "messages", "data": {...}}`, with `update` too, and
+`delete` with the `id`.
 {% if 'frontend' in features %}
-The Messages card on the index page lists them, and adds new ones as they're posted.
+The Messages card on the index page lists them, posts, edits and deletes them, and shows the
+changes made elsewhere as they happen.
 {% end %}
 {% end %}
 {% if 'postgres' in features %}

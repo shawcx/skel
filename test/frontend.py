@@ -134,24 +134,62 @@ async def check_page(profile, port):
     await receive({'action':'delete', 'collection':'notes', 'id':1}, 'app.collections.notes.size == 0')
     sender.close()
 
-    # the messages card posts its form, and lists messages posted elsewhere as they arrive
-    items = "[...document.querySelectorAll('#messages li')].map(li => li.textContent)"
+    # the messages card posts, edits and deletes messages, and shows the changes made
+    # elsewhere as they arrive
+    texts = "[...document.querySelectorAll('#messages li .text')].map(text => text.textContent)"
     async def until(expression):
         for _ in range(50):
             if await cdp.evaluate(expression):
                 return
             await asyncio.sleep(0.1)
-        raise AssertionError(f'{expression} is {await cdp.evaluate(items)}')
-    await cdp.evaluate('''let form = document.querySelector('#messages form')
+        raise AssertionError(f'{expression} is false, the list has {await cdp.evaluate(texts)}')
+    async def listed(expected):
+        # compact, as JSON.stringify is
+        await until(f"JSON.stringify({texts}) == {json.dumps(json.dumps(expected, separators=(',', ':')))}")
+    def api(method, path='', body=None):
+        request = urllib.request.Request(f'http://127.0.0.1:{port}{PREFIX}/api/messages{path}',
+            method=method, data=json.dumps(body).encode() if body else None)
+        with urllib.request.urlopen(request) as rsp:
+            return json.loads(rsp.read() or 'null')
+    def item(id, selector):
+        return f"document.querySelector('#messages li[data-id=\"{id}\"] {selector}')"
+    async def edit(id, text, key):
+        await cdp.evaluate(f"{item(id, '[data-action=edit]')}.click()")
+        assert await cdp.evaluate(f"{item(id, '.text')}.isContentEditable"), 'edit did not start'
+        await cdp.evaluate(f"""(() => {{
+            let text = {item(id, '.text')}
+            text.textContent = {json.dumps(text)}
+            text.dispatchEvent(new KeyboardEvent('keydown', {{key: '{key}', bubbles: true}}))
+        }})()""")
+
+    await cdp.evaluate('''(() => {
+        let form = document.querySelector('#messages form')
         form.elements.text.value = '<b>from the page</b>'
-        form.requestSubmit()''')
-    await until(f"JSON.stringify({items}) == '[\"<b>from the page</b>\"]'")
+        form.requestSubmit()
+    })()''')
+    await listed(['<b>from the page</b>'])
     assert await cdp.evaluate("document.querySelector('#messages b') == null"), 'the text became HTML'
     assert await cdp.evaluate("document.querySelector('#messages input').value == ''"), 'the form was not reset'
-    request = urllib.request.Request(f'http://127.0.0.1:{port}{PREFIX}/api/messages', method='POST',
-        data=json.dumps({'text':'from elsewhere'}).encode())
-    urllib.request.urlopen(request).close()
-    await until(f"JSON.stringify({items}) == '[\"<b>from the page</b>\",\"from elsewhere\"]'")
+    api('POST', body={'text':'from elsewhere'})
+    await listed(['<b>from the page</b>', 'from elsewhere'])
+    first,second = [message['id'] for message in api('GET')['data']]
+
+    api('PUT', f'/{second}', {'text':'edited elsewhere'})
+    await listed(['<b>from the page</b>', 'edited elsewhere'])
+    await edit(first, 'edited in the page', 'Enter')
+    # the collection changes when the server has the change
+    await until(f"app.collections.messages.get({first}).text == 'edited in the page'")
+    assert api('GET', f'/{first}')['text'] == 'edited in the page'
+    await listed(['edited in the page', 'edited elsewhere'])
+    await edit(second, 'not saved', 'Escape')
+    await listed(['edited in the page', 'edited elsewhere'])
+    assert api('GET', f'/{second}')['text'] == 'edited elsewhere'
+
+    await cdp.evaluate(f"{item(first, '[data-action=delete]')}.click()")
+    await listed(['edited elsewhere'])
+    assert [message['id'] for message in api('GET')['data']] == [second]
+    api('DELETE', f'/{second}')
+    await listed([])
 
     # the stylesheet applies and the icon font loads from the webfonts directory
     margin = await cdp.evaluate('getComputedStyle(document.body).marginTop')

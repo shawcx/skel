@@ -198,8 +198,9 @@ def test_messages(app):
     async def check():
 {% if 'auth' in features %}
         browser = Browser(app)
-        rsp = await browser.get('/api/messages')
-        assert rsp.code == 403, rsp
+        for path in ('/api/messages', '/api/messages/1'):
+            rsp = await browser.get(path)
+            assert rsp.code == 403, (path, rsp)
         await browser.get('/login')
         await browser.post('/login', username='alice', password='secret')
         fetch = browser.fetch
@@ -211,16 +212,36 @@ def test_messages(app):
         socket = await open_socket(app)
 {% end %}
 
+        # pages hear about every change on the WebSocket
+        async def sent():
+            return json.loads(await asyncio.wait_for(socket.read_message(), 5))
+
         rsp = await fetch('/api/messages', method='POST', body=json.dumps({'text':'hi'}))
-        assert rsp.code == 201 and json.loads(rsp.body)['text'] == 'hi', rsp
-        # pages hear about it on the WebSocket
-        sent = json.loads(await asyncio.wait_for(socket.read_message(), 5))
-        assert sent == {'action':'add', 'collection':'messages', 'data':json.loads(rsp.body)}, sent
+        added = json.loads(rsp.body)
+        assert rsp.code == 201 and added['text'] == 'hi', rsp
+        assert await sent() == {'action':'add', 'collection':'messages', 'data':added}
         rsp = await fetch('/api/messages', method='POST', body='{}')
         assert rsp.code == 400, rsp
 
         rsp = await fetch('/api/messages')
-        assert 'hi' in [m['text'] for m in json.loads(rsp.body)['data']], rsp.body
+        assert added in json.loads(rsp.body)['data'], rsp.body
+        one = f'/api/messages/{added["id"]}'
+        rsp = await fetch(one)
+        assert rsp.code == 200 and json.loads(rsp.body) == added, rsp
+
+        rsp = await fetch(one, method='PUT', body=json.dumps({'text':'bye'}))
+        changed = json.loads(rsp.body)
+        assert rsp.code == 200 and changed == dict(added, text='bye'), rsp
+        assert await sent() == {'action':'update', 'collection':'messages', 'data':changed}
+        rsp = await fetch(one, method='PUT', body='{"text": 1}')
+        assert rsp.code == 400, rsp
+
+        rsp = await fetch(one, method='DELETE')
+        assert rsp.code == 204, rsp
+        assert await sent() == {'action':'delete', 'collection':'messages', 'id':added['id']}
+        for method,body in (('GET',None), ('PUT','{"text": "x"}'), ('DELETE',None)):
+            rsp = await fetch(one, method=method, body=body)
+            assert rsp.code == 404, (method, rsp)
 
     asyncio.run(check())
 {% end %}

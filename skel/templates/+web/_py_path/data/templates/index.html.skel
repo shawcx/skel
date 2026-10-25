@@ -25,6 +25,13 @@
   <div class="card" id="messages">
     <h5 class="card-header">Messages</h5>
     <ul class="list-group list-group-flush"></ul>
+    <template>
+      <li class="list-group-item d-flex align-items-center gap-2">
+        <span class="text flex-grow-1"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="edit" title="Edit"><i class="fa fa-pen"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-action="delete" title="Delete"><i class="fa fa-trash"></i></button>
+      </li>
+    </template>
     <div class="card-body">
       <form class="d-flex gap-2">
         <input type="text" class="form-control" name="text" placeholder="Say something" autocomplete="off" required>

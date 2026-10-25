@@ -207,7 +207,8 @@ class {{ proper_name }}:
             ( r'/ws', handlers.WebSocket ),
 {% end %}
 {% if 'db' in features %}
-            ( r'/api/messages', handlers.Messages ),
+            ( r'/api/messages',          handlers.Messages   ),
+            ( r'/api/messages/([0-9]+)', handlers.OneMessage ),
 {% end %}
             ])
 {% else %}
