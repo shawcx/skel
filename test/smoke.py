@@ -301,15 +301,16 @@ def check_update(tmp):
     with open(os.path.join(project, '.skel.toml')) as fp:
         assert git('rev-parse', 'HEAD').strip() in fp.read(), 'commit not recorded'
 
+    # newline='' keeps the line endings, which Windows would change to \r\n
     def edit(path, old, new):
-        with open(path) as fp:
+        with open(path, newline='') as fp:
             text = fp.read()
         assert old in text, (path, old)
-        with open(path, 'w') as fp:
+        with open(path, 'w', newline='') as fp:
             fp.write(text.replace(old, new, 1))
 
     # changes in the project
-    with open(os.path.join(project, 'README.md'), 'a') as fp:
+    with open(os.path.join(project, 'README.md'), 'a', newline='') as fp:
         fp.write('\nMy notes\n')
     edit(os.path.join(project, 'Makefile'), '-m pytest', '-m pytest -x')
 
@@ -318,7 +319,7 @@ def check_update(tmp):
     edit(os.path.join(templates, 'README.md.skel'), '# {{ proper_name }}', '# {{ proper_name }} app')
     edit(os.path.join(templates, 'Makefile.skel'), '-m pytest', '-m pytest -q')
     edit(os.path.join(templates, '+db', '_py_path', 'models.py.skel'), 'an example table', 'an example table v2')
-    with open(os.path.join(templates, 'NOTES.md.skel'), 'w') as fp:
+    with open(os.path.join(templates, 'NOTES.md.skel'), 'w', newline='') as fp:
         fp.write('Notes for {{ proper_name }}\n')
     os.remove(os.path.join(templates, '+frontend', 'src', 'js', 'socket.js'))
     git('add', '--all')
