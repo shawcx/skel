@@ -10,7 +10,10 @@ import tarfile
 import tempfile
 import tomllib
 
-from . import DEFAULTS, ROOT, __version__, argparser, checkout, split
+from . import DEFAULTS, __version__, argparser, checkout, installed, split
+
+# where a skel that isn't a checkout or a git install gets the templates it made a project with
+REPOSITORY = 'https://github.com/shawcx/skel'
 
 
 def replay(record, features, without):
@@ -25,18 +28,24 @@ def replay(record, features, without):
     return args
 
 
-def render(launcher, args, output, env=None):
-    out = subprocess.run([sys.executable, launcher, *args, '--output', output],
-        env=env, capture_output=True, text=True)
+def render(command, args, output):
+    out = subprocess.run([*command, *args, '--output', output], capture_output=True, text=True)
     if out.returncode:
-        raise RuntimeError(f'{launcher} failed:\n{out.stderr.strip()}')
+        raise RuntimeError(f'{" ".join(command)} failed:\n{out.stderr.strip()}')
 
 
-def old_skel(top, ref, dest):
-    '''extract skel as it was at ref from the checkout at top'''
+def clone(repository, dest):
+    '''a bare clone of skel, for an installed skel to get old templates from'''
+    out = subprocess.run(['git', 'clone', '--quiet', '--bare', repository, dest], capture_output=True, text=True)
+    if out.returncode:
+        raise RuntimeError(f'Could not get skel from {repository}: {out.stderr.strip()}')
+
+
+def old_skel(top, ref, dest, where):
+    '''extract skel as it was at ref from the git repository at top'''
     out = subprocess.run(['git', '-C', top, 'archive', '--format=tar', ref], capture_output=True)
     if out.returncode:
-        raise RuntimeError(f'{ref} is not in the skel checkout {top}: {out.stderr.decode().strip()}')
+        raise RuntimeError(f'{ref} is not in {where}: {out.stderr.decode().strip()}')
     with tarfile.open(fileobj=io.BytesIO(out.stdout)) as tar:
         try:
             tar.extractall(dest, filter='data')
@@ -127,10 +136,8 @@ def update(args):
     except tomllib.TOMLDecodeError as e:
         argparser.error(f'{project}/.skel.toml: {e}')
 
-    found = checkout()
-    if not found or not shutil.which('git'):
-        argparser.error('--update needs git and a git checkout of skel, which has the templates the project was made with')
-    top = found[0]
+    if not shutil.which('git'):
+        argparser.error('--update needs git, to get the templates the project was made with')
     ref = record.get('commit') or f'v{record["version"]}'
 
     # the project's features, plus or minus the ones given now
@@ -143,10 +150,22 @@ def update(args):
 
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            old_skel(top, ref, os.path.join(tmp, 'old'))
-            render(os.path.join(tmp, 'old', 'skel.py'), replay(record, record['with'], record['without']),
-                os.path.join(tmp, 'base'))
-            render(os.path.join(top, 'skel.py'), replay(record, features, without), os.path.join(tmp, 'new'))
+            found = checkout()
+            if found:
+                top,where = found[0],f'the skel checkout {found[0]}'
+                new_skel = [sys.executable, os.path.join(top, 'skel.py')]
+            else:
+                # an installed skel clones the repository that pip installed it from
+                where = (installed() or (REPOSITORY,))[0]
+                top = os.path.join(tmp, 'skel.git')
+                print(f'Getting skel {ref[:12]} from {where}')
+                clone(where, top)
+                # -P leaves the current directory off the path, so it's this skel
+                new_skel = [sys.executable, '-P', '-m', 'skel']
+            old_skel(top, ref, os.path.join(tmp, 'old'), where)
+            render([sys.executable, os.path.join(tmp, 'old', 'skel.py')],
+                replay(record, record['with'], record['without']), os.path.join(tmp, 'base'))
+            render(new_skel, replay(record, features, without), os.path.join(tmp, 'new'))
             conflicts = merge(project, os.path.join(tmp, 'base'), os.path.join(tmp, 'new'), args.dry_run)
         except RuntimeError as e:
             print(e, file=sys.stderr)

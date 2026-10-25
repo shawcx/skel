@@ -13,6 +13,8 @@
   has its tables already, so mark it as migrated with
   `CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY); INSERT INTO alembic_version VALUES ('0001');`
 - skel makes files with LF line endings on Windows too, which `--update` needs.
+- `--update` works from an installed skel, which clones the repository it came from, and a
+  skel that pip installed from git records its commit.
 
 ## 0.1.0 (2026-10-24)
 

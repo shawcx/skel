@@ -6,6 +6,7 @@ import json
 import shutil
 import argparse
 import subprocess
+import importlib.metadata
 
 from .jsxn import jsxn
 from .version import __version__
@@ -125,6 +126,22 @@ def checkout():
     if os.path.realpath(toplevel) != os.path.realpath(top):
         return None
     return top,commit
+
+
+def installed():
+    '''the repository and commit of a skel that pip installed from git, or None'''
+    try:
+        dist = importlib.metadata.distribution('skel')
+        direct = json.loads(dist.read_text('direct_url.json') or '{}')
+    except (importlib.metadata.PackageNotFoundError,ValueError):
+        return None
+    # the skel that's running, not another one on the path
+    if os.path.realpath(dist.locate_file('skel/__init__.py')) != os.path.realpath(__file__):
+        return None
+    vcs = direct.get('vcs_info', {})
+    if vcs.get('vcs') != 'git' or not vcs.get('commit_id'):
+        return None
+    return direct['url'],vcs['commit_id']
 
 
 def user_values():
@@ -297,12 +314,16 @@ class Skel:
     def record(self):
         '''write .skel.toml, which says how skel made the project for skel --update'''
         found = checkout()
+        if found:
+            # the templates of a checkout match its commit only when they're committed
+            commit = found[1] if not modified(found[0]) else None
+        else:
+            commit = (installed() or (None,None))[1]
         values = {key:self.project[f'__{key}__'] for key in self.keys()}
         lines = [
             '# how skel made this project, skel --update reads it',
             f'version   = {json.dumps(__version__)}',
-            # the templates of a checkout match its commit only when they're committed
-            *([f'commit    = {json.dumps(found[1])}'] if found and not modified(found[0]) else []),
+            *([f'commit    = {json.dumps(commit)}'] if commit else []),
             f'name      = {json.dumps(self.project.proper_name)}',
             f'namespace = {json.dumps(self.project.namespace)}',
             f'with      = {json.dumps(sorted(self.chosen))}',

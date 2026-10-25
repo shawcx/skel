@@ -7,6 +7,7 @@ the web assets are not built, so this runs offline
 import asyncio
 import http.cookies
 import os
+import pathlib
 import re
 import shutil
 import socket
@@ -357,6 +358,29 @@ def check_update(tmp):
     # a project that skel --update can't read
     out = subprocess.run([*skel, '--update', os.path.join(tmp, 'fresh', 'rec')], env=env, capture_output=True, text=True)
     assert out.returncode == 2 and 'no .skel.toml' in out.stderr, out
+
+    # a skel that pip installed from git records the commit, and clones the repository to update
+    v1,v2 = git('rev-parse', 'HEAD~1', 'HEAD').split()
+    def install(commit):
+        site = os.path.join(tmp, f'site-{commit[:7]}')
+        run(sys.executable, '-m', 'pip', 'install', '--no-deps', '--no-build-isolation', '-q', '--target', site,
+            f'git+{pathlib.Path(repo).as_uri()}@{commit}', env=env)
+        return dict(env, PYTHONPATH=site)
+    installed = [sys.executable, '-m', 'skel']
+    project = os.path.join(tmp, 'from-git', 'rec')
+    os.makedirs(os.path.dirname(project))
+    run(*installed, '--with', 'sqlite', 'Rec', env=install(v1), cwd=os.path.dirname(project))
+    with open(os.path.join(project, '.skel.toml')) as fp:
+        assert f'commit    = "{v1}"' in fp.read(), 'installed commit not recorded'
+    with open(os.path.join(project, 'README.md'), 'a', newline='') as fp:
+        fp.write('\nMy notes\n')
+    out = subprocess.run([*installed, '--update', project], env=install(v2), cwd=tmp, capture_output=True, text=True)
+    assert out.returncode == 0, out
+    for line in (f'Getting skel {v1[:12]} from file:', 'merged    README.md', 'updated   Makefile', 'added     NOTES.md'):
+        assert line in out.stdout, (line, out.stdout)
+    after = files(project)
+    assert after['README.md'].startswith(b'# Rec app\n') and after['README.md'].endswith(b'My notes\n')
+    assert f'commit    = "{v2}"'.encode() in after['.skel.toml']
 
 
 def check(tmp, namespace, features, prefix):

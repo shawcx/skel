@@ -9,8 +9,9 @@ Generate a Tornado web application with a Bootstrap and WebSocket frontend, or w
          [--without <feature>,...] [--set <key>=<value>] [--git] [--force] [-V] <Project>
     skel --update <directory> [--with <feature>,...] [--without <feature>,...] [--dry-run]
 
-Install the `skel` command with `pipx install .` (or `uv tool install .`), or run
-`./skel.py` from a checkout. In a checkout:
+Install the `skel` command with `pipx install git+https://github.com/shawcx/skel` (or
+`uv tool install` with the same URL), which records skel's commit in the projects it makes
+for `--update`, or run `./skel.py` from a checkout. In a checkout:
 
     make run NAME=Slog NS=skunk     # ./skel.py --force --namespace skunk --output projects/slog Slog
     make run WITH=systemd           # also passes --with systemd
@@ -37,7 +38,8 @@ which needs `npm`, then `make run`.
 ## Updating projects
 
 Every project has a `.skel.toml` that records the skel version, skel's commit when it ran
-from a checkout with no changes to `skel/`, and the name, namespace, features and values.
+from a checkout with no changes to `skel/` or pip installed it from git, and the name,
+namespace, features and values.
 `skel --update <directory>` reads it and renders the project twice, with the skel that made
 it and with the current one, and then brings the difference into the project:
 
@@ -48,8 +50,9 @@ it and with the current one, and then brings the difference into the project:
 - files that skel no longer makes are kept
 
 `--with` and `--without` add or remove features as part of the update, and `--dry-run`
-shows what would change. It needs git and a checkout of skel, which has the old templates
-in its history: the recorded commit, or the tag `v<version>` when there isn't one.
+shows what would change. It needs git, to get the old templates at the recorded commit, or
+the tag `v<version>` when there isn't one. A checkout of skel has them in its history, and
+an installed skel clones the repository that pip installed it from, or GitHub's.
 
 ## Values
 
