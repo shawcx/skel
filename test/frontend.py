@@ -202,8 +202,11 @@ def main():
         step('browser')
         port = free_port()
         profile = os.path.join(tmp, 'chrome')
-        server = subprocess.Popen([sys.executable, '-m', 'front', '--port', str(port)],
-            env=env, cwd=project, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # the project's venv has its packages, such as SQLAlchemy for sqlite
+        python = os.path.join(project, '.venv', *(['Scripts', 'python.exe'] if os.name == 'nt' else ['bin', 'python']))
+        server_log = open(os.path.join(tmp, 'server.log'), 'w+')
+        server = subprocess.Popen([python, '-m', 'front', '--port', str(port)],
+            env=env, cwd=project, stdout=server_log, stderr=subprocess.STDOUT)
         args = [chrome, '--headless=new', '--remote-debugging-port=0', f'--user-data-dir={profile}',
             '--no-first-run', '--no-default-browser-check', 'about:blank']
         # CI runners may not allow Chrome's sandbox, the page is our own
@@ -214,14 +217,16 @@ def main():
         try:
             asyncio.run(check_page(profile, port))
         except:
-            log.seek(0)
-            print(f'{chrome} output:\n{log.read()}', file=sys.stderr)
+            for name,output in ((chrome, log), ('front', server_log)):
+                output.seek(0)
+                print(f'{name} output:\n{output.read()}', file=sys.stderr)
             raise
         finally:
             for proc in (browser, server):
                 proc.terminate()
                 proc.wait(10)
             log.close()
+            server_log.close()
 
     print('ok')
     return 0
