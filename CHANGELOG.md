@@ -16,6 +16,9 @@
 - `--update` works from an installed skel, which clones the repository it came from, and a
   skel that pip installed from git records its commit.
 - Pushing a `v*` tag runs the tests and makes a GitHub release with the wheel and sdist.
+- The frontend no longer uses jQuery, Backbone or Underscore. The app is an `EventTarget`,
+  the server's add, update and delete messages change a `Collection`, and the scripts are
+  ES modules. The bundle is 84 KB instead of 217 KB.
 
 ## 0.1.0 (2026-10-24)
 

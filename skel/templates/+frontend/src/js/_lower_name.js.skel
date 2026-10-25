@@ -1,40 +1,45 @@
-'use strict'
+import * as bootstrap from 'bootstrap'
 
-var $         = require('jquery')
-var _         = require('underscore')
-var Backbone  = require('backbone')
-var bootstrap = require('bootstrap')
+import Collection from './collection.js'
+import Socket from './socket.js'
 
-var Socket = require('./socket.js')
+// for scripts in the page, as Bootstrap's own bundle does
+window.bootstrap = bootstrap
 
 
-window.Templates = {}
-
-$(document).ready(function() {
-    $('script[type="text/template"]').each(function() {
-        Templates[this.id.slice(2)] = _.template(this.text)
-    })
-})
-
-class {{ proper_name }} {
+class {{ proper_name }} extends EventTarget {
     constructor() {
-        this._events = _.clone(Backbone.Events)
-        this._events.on('connected', this.on_connected, this)
-        this._events.on('add',       this.on_add,       this)
-        this._events.on('update',    this.on_update,    this)
-        this._events.on('delete',    this.on_delete,    this)
+        super()
+        // collections the server keeps up to date over the WebSocket, with messages like
+        // {"action": "add", "collection": "messages", "data": {"id": 1, ...}}
+        this.collections = {}
+
+        this.on('connected', ()    => this.on_connected())
+        this.on('add',       (msg) => this.on_add(msg))
+        this.on('update',    (msg) => this.on_update(msg))
+        this.on('delete',    (msg) => this.on_delete(msg))
     }
 
-    start(promises) {
+    on(action, fn) {
+        this.addEventListener(action, (event) => fn(event.detail))
+    }
+
+    trigger(action, msg) {
+        this.dispatchEvent(new CustomEvent(action, {detail: msg}))
+    }
+
+    collection(name, key = 'id') {
+        return this.collections[name] ??= new Collection(key)
+    }
+
+    start(promises = []) {
         Promise.all(promises).then(() => {
             this.socket = new Socket({
                 onopen: () => {
-                    this._events.trigger('connected')
+                    this.trigger('connected')
                 },
-                onmessage: (msg) => {
-                    let action = msg.action
-                    delete msg.action
-                    this._events.trigger(action, msg)
+                onmessage: ({action, ...msg}) => {
+                    this.trigger(action, msg)
                 }
             })
         })
@@ -45,39 +50,20 @@ class {{ proper_name }} {
     }
 
     on_add(msg) {
-        let collection = this[msg.collection]
-        if (collection) {
-            collection.add(msg.data, {merge: true})
-        }
+        this.collections[msg.collection]?.add(msg.data)
     }
 
     on_update(msg) {
-        let collection = this[msg.collection]
-        if (!collection) {
-            return
-        }
-
-        let key   = collection.model.prototype.idAttribute
-        let value = msg.data[key]
-
-        let model = collection.findWhere({[key]:value})
-        if (model) {
-            model.set(msg.data)
-        }
+        this.collections[msg.collection]?.update(msg.data)
     }
 
     on_delete(msg) {
-        let collection = this[msg.collection]
-        if (collection) {
-            collection.remove(msg.id)
-        }
+        this.collections[msg.collection]?.remove(msg.id)
     }
 }
 
+// the script is at the end of the body, so the page is there already
 window.app = new {{ proper_name }}()
+app.start()
 
-$(document).ready(function() {
-    app.start([])
-})
-
-module.exports = {{ proper_name }}
+export default {{ proper_name }}

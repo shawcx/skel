@@ -1,8 +1,4 @@
-'use strict'
-
-var $ = require('jquery')
-
-class Socket {
+export default class Socket {
     constructor(_options) {
         this.options = {
             path      : 'ws',
@@ -84,5 +80,3 @@ class Socket {
         this.ws.send(JSON.stringify(message))
     }
 }
-
-module.exports = Socket

@@ -112,6 +112,28 @@ async def check_page(profile, port):
     wsurl = await cdp.evaluate('app.socket.wsurl')
     assert wsurl == f'ws://127.0.0.1:{port}{PREFIX}/ws', wsurl
 
+    # Bootstrap is bundled, for the navbar's toggle and scripts in the page
+    assert await cdp.evaluate("typeof bootstrap.Collapse == 'function'"), 'Bootstrap is missing'
+
+    # messages from another WebSocket, which the server relays, change the page's collection
+    await cdp.evaluate('''app.collection('notes').addEventListener('change',
+        (event) => window.changed = event.detail.text)''')
+    sender = await tornado.websocket.websocket_connect(wsurl)
+    async def receive(message, expression):
+        await sender.write_message(json.dumps(message))
+        for _ in range(50):
+            result = await cdp.evaluate(expression)
+            if result:
+                return result
+            await asyncio.sleep(0.1)
+        raise AssertionError(f'{message} did not make {expression} true')
+    await receive({'action':'add', 'collection':'notes', 'data':{'id':1, 'text':'hi'}},
+        "app.collections.notes.get(1)?.text == 'hi'")
+    await receive({'action':'update', 'collection':'notes', 'data':{'id':1, 'text':'bye'}},
+        "window.changed == 'bye' && app.collections.notes.size == 1")
+    await receive({'action':'delete', 'collection':'notes', 'id':1}, 'app.collections.notes.size == 0')
+    sender.close()
+
     # the stylesheet applies and the icon font loads from the webfonts directory
     margin = await cdp.evaluate('getComputedStyle(document.body).marginTop')
     assert margin == '80px', margin
