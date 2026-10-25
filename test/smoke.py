@@ -269,6 +269,10 @@ def check_skel(tmp):
     run(sys.executable, '-m', 'skel', *everything, 'Smoke',
         env=dict(env, PYTHONPATH=site), cwd=os.path.join(tmp, 'installed'))
     checkout,installed = files(os.path.join(tmp, 'checkout')), files(os.path.join(tmp, 'installed'))
+    # only a clean checkout knows the commit that made the project
+    record = os.path.join('smoke', '.skel.toml')
+    assert not re.search(rb'^commit ', installed[record], re.M), installed[record]
+    checkout[record] = re.sub(rb'^commit .*\n', b'', checkout[record], flags=re.M)
     assert checkout.keys() == installed.keys(), sorted(checkout.keys() ^ installed.keys())
     assert checkout == installed, [path for path in checkout if checkout[path] != installed[path]]
 

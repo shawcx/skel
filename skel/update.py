@@ -46,12 +46,12 @@ def old_skel(top, ref, dest):
 
 
 def files(top):
-    '''the paths of the files under top, relative to it'''
+    '''the paths of the files under top, relative to it and with / on every OS'''
     found = set()
     for base,directories,filenames in os.walk(top):
         directories[:] = [d for d in directories if d != '.git']
         for filename in filenames:
-            found.add(os.path.relpath(os.path.join(base, filename), top))
+            found.add(os.path.relpath(os.path.join(base, filename), top).replace(os.sep, '/'))
     found.discard('.skel.toml')
     return found
 
