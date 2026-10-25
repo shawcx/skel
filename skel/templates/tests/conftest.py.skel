@@ -9,12 +9,15 @@ import urllib.request
 {% end %}
 
 import pytest
+{% if 'postgres' in features %}
+import sqlalchemy.engine
+{% end %}
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 {% if 'postgres' in features %}
 
-# the tests that start the app need a PostgreSQL database to use, for example
+# the tests that use the database need a PostgreSQL one, for example
 # TEST_POSTGRES_URL=postgresql://user:password@localhost/{{ lower_name }}_test
 POSTGRES = os.environ.get('TEST_POSTGRES_URL')
 {% end %}
@@ -126,3 +129,17 @@ def app(tmp_path):
     app = App(tmp_path)
     yield app
     app.stop()
+{% if 'db' in features %}
+
+
+@pytest.fixture
+def database_url(tmp_path):
+    '''the database for tests that use it without the app'''
+{% if 'postgres' in features %}
+    if not POSTGRES:
+        pytest.skip('needs a PostgreSQL database in TEST_POSTGRES_URL')
+    return sqlalchemy.engine.make_url(POSTGRES).set(drivername='postgresql+asyncpg')
+{% else %}
+    return f'sqlite+aiosqlite:///{tmp_path / "test.db"}'
+{% end %}
+{% end %}

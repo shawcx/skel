@@ -528,6 +528,8 @@ def check(tmp, namespace, features, prefix):
         expected += ['nginx.py', 'data/nginx.conf', 'data/nginx-static.conf']
     if 'sqlite' in features or 'postgres' in features:
         expected += ['db.py', 'models.py'] + (['handlers/messages.py'] if 'web' in features else [])
+        expected += ['migrations/__init__.py', 'migrations/env.py', 'migrations/script.py.mako',
+            'migrations/versions/0001_create_messages.py']
     if 'auth' in features:
         expected += ['auth.py', 'handlers/login.py', 'data/templates/login.html']
     for name in expected:
@@ -536,6 +538,62 @@ def check(tmp, namespace, features, prefix):
         assert f'{top}/{name}' not in names, f'{top}/{name} is in the wheel'
     if 'web' not in features:
         assert not any('/handlers/' in name for name in names), names
+
+    if 'sqlite' in features:
+        check_migration(module, env, project, package)
+
+
+def check_migration(module, env, project, package):
+    '''--migration after a change to a model, and the test that finds a change with no migration'''
+    step('migration')
+    ini = os.path.join(project, 'migration.ini')
+    with open(ini, 'w') as fp:
+        fp.write(f'[sqlite]\npath = {os.path.join(project, "migration.db")}\n')
+
+    def migration(message):
+        return subprocess.run([sys.executable, '-m', module, '--ini', ini, '--migration', message],
+            env=env, capture_output=True, text=True)
+
+    def test_migrations():
+        return subprocess.run([sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', '-k', 'migrations'],
+            cwd=project, capture_output=True, text=True)
+
+    versions = os.path.join(package, 'migrations', 'versions')
+    def migrations():
+        return sorted(f for f in os.listdir(versions) if f.endswith('.py'))
+
+    out = migration('nothing')
+    assert out.returncode == 0 and 'nothing to migrate' in out.stderr, out
+    assert migrations() == ['0001_create_messages.py'], migrations()
+    out = migration(' ')
+    assert out.returncode == 1 and 'needs a message' in out.stderr, out
+
+    # a new column, which the test finds until there's a migration for it
+    models = os.path.join(package, 'models.py')
+    with open(models) as fp:
+        text = fp.read()
+    created = '    created : Mapped[datetime.datetime] = mapped_column(default=now)\n'
+    assert created in text, text
+    with open(models, 'w') as fp:
+        fp.write(text.replace(created, created + '    read    : Mapped[bool] = mapped_column(default=False)\n'))
+    out = test_migrations()
+    assert out.returncode == 1 and 'run make migration' in out.stdout, out
+
+    out = migration('add read')
+    assert out.returncode == 0 and "Detected added column 'messages.read'" in out.stderr, out
+    # the app logs what it did, Alembic prints nothing
+    assert out.stdout == '', out
+    assert migrations() == ['0001_create_messages.py', '0002_add_read.py'], migrations()
+    with open(os.path.join(versions, '0002_add_read.py')) as fp:
+        text = fp.read()
+    for line in ("revision      = '0002'", "down_revision = '0001'", "add_column(sa.Column('read'"):
+        assert line in text, (line, text)
+    out = test_migrations()
+    assert out.returncode == 0, out
+
+    # the app brings its database up to the new migration when it starts
+    out = migration('again')
+    assert 'Migrating the database from 0001 to 0002' in out.stderr and 'nothing to migrate' in out.stderr, out
 
 
 def check_serve(features, prefix, module, env, project, package):
@@ -583,12 +641,12 @@ def check_run(module, env, project):
 
 def main():
     # the generated tests need pytest, and the sqlite feature its packages
-    for module in ('pytest', 'sqlalchemy', 'aiosqlite'):
+    for module in ('pytest', 'sqlalchemy', 'alembic', 'aiosqlite'):
         try:
             __import__(module)
         except ImportError:
             print(f'{module} is needed, install the test packages with:\n'
-                '  python3 -m pip install tornado "setuptools>=77" pytest "sqlalchemy[asyncio]" aiosqlite',
+                '  python3 -m pip install tornado "setuptools>=77" pytest "sqlalchemy[asyncio]" alembic aiosqlite',
                 file=sys.stderr)
             return 1
     with tempfile.TemporaryDirectory() as tmp:

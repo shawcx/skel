@@ -270,6 +270,8 @@ class Skel:
                 if base == self.templates:
                     # features are only added when selected
                     directories[:] = [d for d in directories if not d.startswith('+')]
+                # installing skel compiles the .py templates
+                directories[:] = [d for d in directories if d != '__pycache__']
                 for filename in filenames:
                     src = os.path.join(base, filename)
                     yield os.path.relpath(src, self.templates), self.destination(os.path.relpath(src, top))

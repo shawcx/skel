@@ -7,6 +7,12 @@
   run when `TEST_POSTGRES_URL` is set.
 - `sqlite` and `postgres` share the models and API in a `db` feature that comes with
   either, and can't be used together.
+- Database migrations with Alembic: the app brings its database up to the newest migration
+  when it starts, `make migration MESSAGE="..."` writes the next one after a change to the
+  models, and `make test` fails while a change has no migration. A database made by 0.1.0
+  has its tables already, so mark it as migrated with
+  `CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY); INSERT INTO alembic_version VALUES ('0001');`
+- skel makes files with LF line endings on Windows too, which `--update` needs.
 
 ## 0.1.0 (2026-10-24)
 

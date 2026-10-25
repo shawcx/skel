@@ -19,6 +19,14 @@ run:
 
 test:
 	$(PYTHON) -m pytest
+{% if 'db' in features %}
+
+# after changing the models, write the migration that changes the tables, like
+# make migration MESSAGE="add a column"
+migration:
+	$(if $(MESSAGE),,$(error give the migration a MESSAGE, like make migration MESSAGE="add a column"))
+	$(PYTHON) -m {{ py_name }} --migration "$(MESSAGE)" $(ARGS)
+{% end %}
 
 # uv makes the venv when it's installed, otherwise python's venv module
 UV = $(shell uv --version)

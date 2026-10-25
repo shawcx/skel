@@ -24,10 +24,10 @@ An existing project is only overwritten with `--force`. `--git` makes the projec
 repository and commits it, with its features in the message. Requires Python 3.11+ and
 `tornado`.
 
-`make test` also needs `pytest`, and SQLAlchemy and aiosqlite for the `sqlite` feature. It
-uses `.venv` if there is one, which can be made with:
+`make test` also needs `pytest`, and SQLAlchemy, Alembic and aiosqlite for the `sqlite`
+feature. It uses `.venv` if there is one, which can be made with:
 
-    uv venv && uv pip install tornado "setuptools>=77" pip pytest "sqlalchemy[asyncio]" aiosqlite asyncpg
+    uv venv && uv pip install tornado "setuptools>=77" pip pytest "sqlalchemy[asyncio]" alembic aiosqlite asyncpg
 
 `make test-docker` also runs PostgreSQL in a container, for the `postgres` feature.
 
@@ -104,8 +104,8 @@ another feature by wrapping all of it in an `{% if %}`.
 `DEFAULTS` and `REQUIRES` in `skel/__init__.py` list the default features and the features that
 need others. Leaving out a feature also leaves out the default features that need it,
 so `--without web` also leaves out `frontend`. `IMPLIES` lists features that bring others
-with them, such as `sqlite` and `postgres`, which both bring `db` with the models and API
-they share, and `EXCLUSIVE` the ones that can't be used together.
+with them, such as `sqlite` and `postgres`, which both bring `db` with the models,
+migrations and API they share, and `EXCLUSIVE` the ones that can't be used together.
 
 | Feature    | Adds                                                                          |
 |------------|-------------------------------------------------------------------------------|
@@ -117,5 +117,5 @@ they share, and `EXCLUSIVE` the ones that can't be used together.
 | `gitlab`   | a GitLab CI pipeline that runs the tests and builds the web assets            |
 | `nginx`    | `--nginx [<server_name>]`, which writes an nginx site that proxies to the app |
 | `postgres` | PostgreSQL through async SQLAlchemy, with a `db` service when using docker    |
-| `sqlite`   | a SQLite database through async SQLAlchemy, with an example model and API     |
+| `sqlite`   | SQLite through async SQLAlchemy, with Alembic migrations, a model and an API  |
 | `systemd`  | `--systemd [<user>]`, which writes a systemd service for the app              |

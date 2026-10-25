@@ -1,0 +1,89 @@
+'''database migrations with Alembic: db.connect() brings the database up to the newest
+   migration, and after a change to the models --migration writes the next one'''
+
+import argparse
+import logging
+import os
+
+import alembic.autogenerate
+import alembic.command
+import alembic.config
+import alembic.migration
+import alembic.script
+import alembic.util
+
+import {{ py_name }}
+
+from .. import db
+from .. import models
+
+# Alembic logs which database it's using whenever it connects, the app logs what it migrates
+logging.getLogger('alembic').setLevel(logging.WARNING)
+
+
+def arguments():
+    {{ py_name }}.argparser.add_argument('--migration',
+        metavar='<message>',
+        help='Write a migration for the changes to the models, then exit')
+
+
+def config(connection):
+    '''Alembic's settings, without an alembic.ini, so env.py uses the connection'''
+    # quiet, as the app logs what Alembic would print
+    config = alembic.config.Config(cmd_opts=argparse.Namespace(quiet=True))
+    config.set_main_option('script_location', os.path.dirname(os.path.abspath(__file__)))
+    config.attributes['connection'] = connection
+    return config
+
+
+def migrate(connection):
+    '''bring the database up to the newest migration'''
+    settings = config(connection)
+    newest  = alembic.script.ScriptDirectory.from_config(settings).get_current_head()
+    current = alembic.migration.MigrationContext.configure(connection).get_current_revision()
+    if current != newest:
+        logging.info('Migrating the database from %s to %s', current or 'empty', newest)
+        try:
+            alembic.command.upgrade(settings, 'head')
+        except alembic.util.CommandError as e:
+            # a database migrated by a newer version of the app, say
+            raise {{ py_name }}.error('Could not migrate the database: %s', e) from None
+
+
+def differences(connection):
+    '''what a migration would have to change for the database to match the models'''
+    context = alembic.migration.MigrationContext.configure(connection)
+    return alembic.autogenerate.compare_metadata(context, db.Base.metadata)
+
+
+def revision(connection, message):
+    '''write the next migration, numbered after the others, and return its path'''
+    settings = config(connection)
+    count = len(list(alembic.script.ScriptDirectory.from_config(settings).walk_revisions()))
+    script = alembic.command.revision(settings, message, autogenerate=True, rev_id=f'{count + 1:04d}')
+    return script.path
+
+
+async def write():
+    '''with --migration, write a migration and return true, so the app exits'''
+    message = {{ py_name }}.args.migration
+    if message is None:
+        return False
+    if not message.strip():
+        raise {{ py_name }}.error('--migration needs a message, like "add a column"')
+
+    # the database has to have the newest migration to compare it with the models
+    await db.connect()
+    try:
+        async with db.engine.begin() as conn:
+            if not await conn.run_sync(differences):
+                logging.info('The database matches the models, so there is nothing to migrate')
+                return True
+            # Alembic logs each change it puts in the migration
+            logging.getLogger('alembic.autogenerate').setLevel(logging.INFO)
+            path = await conn.run_sync(revision, message)
+    finally:
+        await db.close()
+    logging.info('Wrote %s, check it before running the app', path)
+    return True
+

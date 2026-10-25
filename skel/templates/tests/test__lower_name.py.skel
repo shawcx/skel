@@ -1,5 +1,5 @@
 
-{% if 'web' in features %}
+{% if 'web' in features or 'db' in features %}
 import asyncio
 {% end %}
 import datetime
@@ -16,12 +16,18 @@ import os
 {% end %}
 
 import pytest
+{% if 'db' in features %}
+import sqlalchemy.ext.asyncio
+{% end %}
 {% if 'web' in features %}
 import tornado.httpclient
 import tornado.websocket
 {% end %}
 
 import {{ py_name }}
+{% if 'db' in features %}
+from {{ py_name }} import migrations
+{% end %}
 from {{ py_name }} import version
 
 
@@ -160,6 +166,23 @@ def test_runs(app):
     # terminate() sends SIGTERM, which stops {{ proper_name }} cleanly, but on Windows it kills it
     if os.name == 'posix':
         assert code == 0
+{% end %}
+{% if 'db' in features %}
+
+
+def test_migrations(database_url):
+    '''the migrations make the tables that the models describe'''
+    async def check():
+        engine = sqlalchemy.ext.asyncio.create_async_engine(database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(migrations.migrate)
+                return await conn.run_sync(migrations.differences)
+        finally:
+            await engine.dispose()
+
+    changes = asyncio.run(check())
+    assert not changes, f'the models have changes that no migration makes, run make migration: {changes}'
 {% end %}
 {% if 'db' in features and 'web' in features %}
 

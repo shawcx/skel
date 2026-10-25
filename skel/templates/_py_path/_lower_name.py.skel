@@ -34,6 +34,7 @@ from . import nginx
 {% end %}
 {% if 'db' in features %}
 from . import db
+from . import migrations
 {% end %}
 {% if 'systemd' in features %}
 from . import systemd
@@ -90,6 +91,10 @@ class {{ proper_name }}:
 
         systemd.arguments()
 {% end %}
+{% if 'db' in features %}
+
+        migrations.arguments()
+{% end %}
 
         # errors go up to main, which logs them and exits with 1
         await {{ py_name }}.settings.load()
@@ -110,6 +115,12 @@ class {{ proper_name }}:
 
         # manage users instead of running
         if auth.manage_users():
+            return
+{% end %}
+{% if 'db' in features %}
+
+        # write a migration instead of running
+        if await migrations.write():
             return
 {% end %}
 

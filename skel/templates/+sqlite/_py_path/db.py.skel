@@ -9,7 +9,7 @@ import {{ py_name }}
 
 
 class Base(sqlalchemy.orm.DeclarativeBase):
-    '''models derive from this, and connect() creates their tables'''
+    '''models derive from this, and the migrations create their tables'''
 
 
 engine  = None
@@ -23,16 +23,16 @@ def path():
 
 
 async def connect():
-    '''open the database and create the tables that don't exist yet'''
+    '''open the database and bring it up to the newest migration'''
     global engine, session
 
-    # the models have to be imported for create_all to know their tables
-    from . import models
+    # imported here, as migrations imports db
+    from . import migrations
 
     engine = sqlalchemy.ext.asyncio.create_async_engine(f'sqlite+aiosqlite:///{path()}')
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(migrations.migrate)
     except sqlalchemy.exc.SQLAlchemyError as e:
         raise {{ py_name }}.error('Could not open the database %s: %s', path(), e) from None
 

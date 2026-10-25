@@ -12,6 +12,9 @@
 {% end %}
     make venv       # make .venv with the package, pytest and build, with uv if it's installed
     make test       # run the tests in tests/
+{% if 'db' in features %}
+    make migration  # write a migration after changing the models, MESSAGE="what changed"
+{% end %}
     make install    # pip install the package
     make dist       # build the sdist and wheel in dist/
 
@@ -81,9 +84,14 @@ The app opens `{{ py_path }}/data/{{ lower_name }}.db` at startup, or the `path`
 The app connects at startup to the PostgreSQL database in the `url` of the `[postgres]`
 section of the ini file, `postgresql://localhost/{{ lower_name }}` if it isn't set,
 {% end %}
-and creates the tables of the models in `{{ py_path }}/models.py` that don't exist yet.
-Existing tables aren't changed, so a changed model needs its table altered or dropped by
-hand. Handlers use the database with:
+and brings it up to the newest migration in `{{ py_path }}/migrations/versions/`. After
+changing the models in `{{ py_path }}/models.py`, write the migration that changes the
+tables to match, then check it and commit it with the models:
+
+    make migration MESSAGE="add a column"
+
+`make test` fails while the models have a change that no migration makes. Handlers use the
+database with:
 
     async with db.session() as session:
         messages = await session.scalars(sqlalchemy.select(Message))
