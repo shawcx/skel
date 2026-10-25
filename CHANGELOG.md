@@ -15,6 +15,7 @@
 - skel makes files with LF line endings on Windows too, which `--update` needs.
 - `--update` works from an installed skel, which clones the repository it came from, and a
   skel that pip installed from git records its commit.
+- Pushing a `v*` tag runs the tests and makes a GitHub release with the wheel and sdist.
 
 ## 0.1.0 (2026-10-24)
 

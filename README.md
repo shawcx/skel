@@ -122,3 +122,10 @@ migrations and API they share, and `EXCLUSIVE` the ones that can't be used toget
 | `postgres` | PostgreSQL through async SQLAlchemy, with a `db` service when using docker    |
 | `sqlite`   | SQLite through async SQLAlchemy, with Alembic migrations, a model and an API  |
 | `systemd`  | `--systemd [<user>]`, which writes a systemd service for the app              |
+
+## Releasing
+
+Set the version in `skel/version.py`, rename the changelog's `Unreleased` section to the
+version and date, commit, and push a tag like `v0.2.0`. `release.yml` runs the tests, checks
+that the tag matches the version and that `CHANGELOG.md` has notes for it, then makes a
+GitHub release with the wheel and sdist. Afterwards, set the version to the next `.dev0`.

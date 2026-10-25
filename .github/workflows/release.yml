@@ -1,0 +1,41 @@
+name: release
+
+# pushing a tag like v0.2.0 tests it, then makes a GitHub release with the wheel and sdist
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15'
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Check the version and take its notes from CHANGELOG.md
+        shell: python
+        run: |
+          import os, re, sys
+          version = os.environ['GITHUB_REF_NAME'].removeprefix('v')
+          built = sorted(f for f in os.listdir('dist') if f.endswith(('.whl', '.tar.gz')))
+          if built != [f'skel-{version}-py3-none-any.whl', f'skel-{version}.tar.gz']:
+              sys.exit(f'the tag is {version}, but skel/version.py made {built}')
+          with open('CHANGELOG.md') as fp:
+              changelog = fp.read()
+          section = re.search(rf'^## {re.escape(version)}(?: [^\n]*)?\n(.*?)(?=^## |\Z)', changelog, re.M | re.S)
+          if not section or not section.group(1).strip():
+              sys.exit(f'CHANGELOG.md has no notes for {version}')
+          with open('notes.md', 'w') as fp:
+              fp.write(section.group(1).strip() + '\n')
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.whl dist/*.tar.gz --verify-tag --title "skel ${GITHUB_REF_NAME#v}" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
